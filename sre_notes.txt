@@ -1,0 +1,27 @@
+High CPU Usage:
+High CPU usage is often caused by runaway processes, infinite loops, or resource-intensive applications.
+Use 'top' or 'htop' to identify the process consuming the most CPU.
+Check application logs for errors or infinite loops.
+Use 'kill -9 PID' to terminate the runaway process.
+Always perform RCA after resolving to prevent recurrence.
+
+Memory Leaks:
+Memory leaks occur when applications allocate memory but fail to release it.
+Symptoms include gradually increasing memory usage over time.
+Use 'free -m' to check available memory.
+Use 'ps aux --sort=-%mem' to find memory-hungry processes.
+Restart the affected service as immediate mitigation.
+
+Incident Response:
+First step in incident response is to acknowledge the alert immediately.
+Identify the blast radius — how many users or systems are affected.
+Communicate status updates every 15 minutes to stakeholders.
+Mitigate first, root cause later.
+Document everything in the incident ticket in real time.
+
+Monitoring:
+The four golden signals are latency, traffic, errors, and saturation.
+Latency measures how long a request takes to respond.
+Traffic measures the demand on your system.
+Errors measure the rate of failed requests.
+Saturation measures how full your system is.
