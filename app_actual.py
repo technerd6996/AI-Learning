@@ -32,7 +32,7 @@ if "collection" not in st.session_state:
         
         # Store in ChromaDB
         chroma_client = chromadb.Client()
-        collection = chroma_client.create_collection(name="sre_knowledge")
+        collection = chroma_client.get_or_create_collection(name="sre_knowledge")
         
         for i, chunk in enumerate(all_chunks):
             collection.add(
