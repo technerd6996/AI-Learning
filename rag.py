@@ -2,10 +2,12 @@ from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import chromadb
 
+
+
 # Step 1 — Load the document
 
-loader = TextLoader("sre_notes.txt")
-documents = loader.load()  
+files = ["sre_notes.txt", "SRE_Google.txt" ]
+all_chunks = []
 
 #Step 2 - Split the document
 
@@ -13,6 +15,14 @@ splitter = RecursiveCharacterTextSplitter(
     chunk_size=200,
     chunk_overlap=50
 )
+
+for file in files:
+    loader = TextLoader(file)
+    documents = loader.load()
+    chunks = splitter.split_documents(documents)
+    all_chunks.extend(chunks)
+
+print(f"Total Chunks: {len(all_chunks)}")
 
 chunks = splitter.split_documents(documents)
 
