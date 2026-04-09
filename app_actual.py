@@ -10,7 +10,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 # Page config
 st.set_page_config(page_title="SRE Assistant", page_icon="🔧")
 st.title("🔧 SRE Knowledge Assistant")
-st.caption("Powered by RAG + LangChain + ChromaDB")
+st.caption("Powered by RAG + LangChain + ChromaDB and Fueled by Laziness of an Engineer 😴")
 
 # Initialize RAG pipeline once
 if "collection" not in st.session_state:
