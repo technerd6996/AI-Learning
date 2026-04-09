@@ -1,0 +1,1272 @@
+Chapter 30 - Embedding an SRE to Recover from Operational Overload
+Written by Randall Bosetti Edited by Diane Bates
+It's standard policy for Google's SRE teams to evenly split their time between projects and reactive ops work. In practice, this balance can be upset for months at a time by an increase in the daily ticket volume. A burdensome amount of ops work is especially dangerous because the SRE team might burn out or be unable to make progress on project work. When a team must allocate a disproportionate amount of time to resolving tickets at the cost of spending time improving the service, scalability and reliability suffer.
+One way to relieve this burden is to temporarily transfer an SRE into the overloaded team. Once embedded in a team, the SRE focuses on improving the team's practices instead of simply helping the team empty the ticket queue. The SRE observes the team's daily routine and makes recommendations to improve their practices. This consultation gives the team a fresh perspective on its routines that team members can't provide for themselves.
+When you are using this approach, it isn't necessary to transfer more than one engineer. Two SREs don't necessarily produce better results and may actually cause problems if the team reacts defensively.
+If you are starting your first SRE team, the approach outlined in this chapter will help you to avoid turning into an operation team solely focused on a ticket rotation. If you decide to embed yourself or one of your reports in a team, take time to review SRE practices and philosophy in Ben Treynor Sloss's introduction and the material on monitoring in Monitoring Distributed Systems.
+The following sections provide guidance to the SRE who will be embedded on a team.
+
+Phase 1: Learn the Service and Get Context
+
+Your job while embedded with the team is to articulate why processes and habits contribute to, or detract from, the service's scalability. Remind the team that more tickets should not require more SREs: the goal of the SRE model is to only introduce more humans as more complexity is added to the system. Instead, try to draw attention to how healthy work habits reduce the time spent on tickets. Doing so is as important as pointing out missed opportunities for automation or simplification of the service.
+
+Ops Mode Versus Nonlinear Scaling
+
+
+The term ops mode refers to a certain method of keeping a service running. Various work items increase with the size of the service. For example, a service needs a way to increase the number of configured virtual machines (VMs) as it grows. A team in ops mode responds by having a greater number of administrators managing those VMs. SRE instead focuses on writing software or eliminating scalability concerns so that the number of people required to run a service doesn't increase as a function of load on the service.
+Teams sliding into ops mode might be convinced that scale doesn't matter for them ("my service is tiny"). Shadow an on-call session to determine whether the assessment is true, because the element of scale affects your strategy.
+If the primary service is important to the business but actually is tiny (entailing few resources or low complexity), put more focus on ways in which the team's current approach prevents them from improving the service's reliability. Remember that your job is to make the service work, not to shield the development team from alerts.
+On the other hand, if the service is just getting started, focus on ways to prepare the team for explosive growth. A 100 request/second service can turn into a 10k request/second service in a year.
+
+Identify the Largest Sources of Stress
+
+SRE teams sometimes fall into ops mode because they focus on how to quickly address emergencies instead of how to reduce the number of emergencies. A default to ops mode usually happens in response to an overwhelming pressure, real or imagined. After you've learned enough about the service to ask hard questions about its design and deployment, spend some time prioritizing various
+
+service outages according to their impact on the team's stress levels. Keep in mind that, due to the team's perspective and history, some very small problems or outages may produce an inordinate amount of stress.
+
+Identify Kindling
+
+Once you identify a team's largest existing problems, move on to emergencies waiting to happen. Sometimes impending emergencies come in the form of a new subsystem that isn't designed to be self-managing. Other sources include:
+Knowledge gaps
+
+In large teams, people can overspecialize without immediate consequence. When a person specializes, they run the risk of either not having the broad knowledge they need to perform on-call support or allowing team members to ignore the critical pieces of the system that they own.
+Services developed by SRE that are quietly increasing in importance
+
+These services often don't get the same careful attention as new feature launches because they're smaller in scale and implicitly endorsed by at least one SRE.
+Strong dependence on "the next big thing"
+
+People might ignore problems for months at a time because they believe the new solution that's on the horizon obviates temporary fixes.
+Common alerts that aren't diagnosed by either the dev team or SREs
+
+Such alerts are frequently triaged as transient, but still distract your teammates from fixing real problems. Either investigate such alerts fully, or fix the alerting rules.
+Any service that is both the subject of complaints from your clients and lacks a formal SLI/SLO/SLA
+See Service Level Objectives for a discussion of SLIs, SLOs, and SLAs.
+
+Any service with a capacity plan that is effectively "Add more servers: our
+
+servers were running out of memory last night"
+
+Capacity plans should be sufficiently forward-looking. If your system model predicts that servers need 2 GB, a loadtest that passes in the short term (revealing 1.99 GB in its last run) doesn't necessarily mean that your system capacity is in adequate shape.
+Postmortems that only have action items for rolling back the specific changes that caused an outage
+For example, "Change the streaming timeout back to 60 seconds," instead of "Figure out why it sometimes takes 60 seconds to fetch the first megabyte of our promo videos."
+Any serving-critical component for which the existing SREs respond to questions by saying, "We don't know anything about that; the devs own it"
+To give acceptable on-call support for a component, you should at least know the consequences when it breaks and the urgency needed to fix problems.
+
+Phase 2: Sharing Context
+After scoping the dynamics and pain points of the team, lay the groundwork for improvement through best practices like postmortems and by identifying sources of toil and how to best address them.
+
+Write a Good Postmortem for the Team
+
+Postmortems offer much insight into a team's collective reasoning. Postmortems conducted by unhealthy teams are often ineffectual. Some team members might consider postmortems punitive, or even useless. While you might be tempted to review the postmortem archives and leave comments for improvement, doing so doesn't help the team. Instead, the exercise might put the team on the defensive.
+Instead of trying to correct previous mistakes, take ownership of the next postmortem. There will be an outage while you're embedded. If you aren't the person on-call, team up with the on-call SRE to write a great, blameless postmortem. This document is an opportunity to demonstrate how a shift toward
+
+the SRE model benefits the team by making bug fixes more permanent. More permanent bug fixes reduce the impact of outages on team members' time.
+As mentioned, you might encounter responses such as "Why me?" This response is especially likely when a team believes that the postmortem process is retaliatory. This attitude comes from subscribing to the Bad Apple Theory: the system is working fine, and if we get rid of all the bad apples and their mistakes, the system will continue to be fine. The Bad Apple Theory is demonstrably false, as shown by evidence [Dek14] from several disciplines, including airline safety. You should point out this falsity. The most effective phrasing for a postmortem is to say, "Mistakes are inevitable in any system with multiple subtle interactions. You were on-call, and I trust you to make the right decisions with the right information. I'd like you to write down what you were thinking at each point in time, so that we can find out where the system misled you, and where the cognitive demands were too high."
+
+Sort Fires According to Type
+
+There are two types of fires in this simplified-for-convenience model:
+
+Some fires shouldn't exist. They cause what is commonly called ops work or toil (see Eliminating Toil).
+Other fires that cause stress and/or furious typing are actually part of the job.
+In either case, the team needs to build tools to control the burn.
+
+Sort the team fires into toil and not-toil. When you're finished, present the list to the team and clearly explain why each fire is either work that should be automated or acceptable overhead for running the service.
+
+Phase 3: Driving Change
+Team health is a process. As such, it's not something that you can solve with heroic effort. To ensure that the team can self-regulate, you can help them build a good mental model for an ideal SRE engagement.
+
+Note
+
+Humans are pretty good at homeostasis, so focus on creating (or restoring) the right initial conditions and teaching the small set of principles needed to make healthy choices.
+
+Start with the Basics
+
+Teams struggling with the distinction between the SRE and traditional ops model are generally unable to articulate why certain aspects of the team's code, processes, or culture bother them. Rather than trying to address each of these issues point-by-point, work forward from the principles outlined in Chapters Introduction and Monitoring Distributed Systems.
+Your first goal for the team should be writing a service level objective (SLO), if one doesn't already exist. The SLO is important because it provides a quantitative measure of the impact of outages, in addition to how important a process change could be. An SLO is probably the single most important lever for moving a team from reactive ops work to a healthy, long-term SRE focus. If this agreement is missing, no other advice in this chapter will be helpful. If you find yourself on a team without SLOs, first read Service Level Objectives, then get the tech leads and management in a room and start arbitrating.
+
+Get Help Clearing Kindling
+
+You may have a strong urge to simply fix the issues you identify. Please resist the urge to fix these issues yourself, because doing so bolsters the idea that "making changes is for other people." Instead, take the following steps:
+1. Find useful work that can be accomplished by one team member.
+2. Clearly explain how this work addresses an issue from the postmortem in a permanent way. Even otherwise healthy teams can produce shortsighted action items.
+3. Serve as the reviewer for the code changes and document revisions.
+4. Repeat for two or three issues.
+
+When you identify an additional issue, put it in a bug report or a doc for the team to consult. Doing so serves the dual purposes of distributing information and encouraging team members to write docs (which are often the first victim of deadline pressure). Always explain your reasoning, and emphasize that good documentation ensures that the team doesn't repeat old mistakes in a slightly new
+
+context.
+
+Explain Your Reasoning
+
+As the team recovers its momentum and grasps the basics of your suggested changes, move on to tackle the quotidian decisions that originally led to ops overload. Prepare for this undertaking to be challenged. If you're lucky, the challenge will be along the lines of, "Explain why. Right now. In the middle of the weekly production meeting."
+If you're unlucky, no one demands an explanation. Sidestep this problem entirely by simply explaining all of your decisions, whether or not someone requests an explanation. Refer to the basics that underscore your suggestions. Doing so helps build the team's mental model. After you leave, the team should be able to predict what your comment on a design or changelist would be. If you don't explain your reasoning, or do so poorly, there is a risk that the team will simply emulate that lackadaisical behavior, so be explicit.
+Examples of a thorough explanation of your decision:
+
+"I'm not pushing back on the latest release because the tests are bad. I'm pushing back because the error budget we set for releases is exhausted." "Releases need to be rollback-safe because our SLO is tight. Meeting that SLO requires that the mean time to recovery is small, so in-depth diagnosis before a rollback is not realistic."
+Examples of an insufficient explanation of your decision:
+
+"I don't think having every server generate its routing config is safe, because we can't see it."
+This decision is probably correct, but the reasoning is poor (or poorly explained). The team can't read your mind, so they very likely might emulate the observed poor reasoning. Instead, try "[...] isn't safe because a bug in that code can cause a correlated failure across the service and the additional code is a source of bugs that might slow down a rollback."
+    "The automation should give up if it encounters a conflicting deployment." Like the previous example, this explanation is probably correct, but insufficient.
+
+Instead, try "[...] because we're making the simplifying assumption that all changes pass through the automation, and something has clearly violated that rule. If this happens often, we should identify and remove sources of unorganized change."
+
+Ask Leading Questions
+
+Leading questions are not loaded questions. When talking with the SRE team, try to ask questions in a way that encourages people to think about the basic principles. It's particularly valuable for you to model this behavior because, by definition, a team in ops mode rejects this sort of reasoning from its own constituents. Once you've spent some time explaining your reasoning for various policy questions, this practice reinforces the team's understanding of SRE philosophy.
+Examples of leading questions:
+
+"I see that the TaskFailures alert fires frequently, but the on-call engineers usually don't do anything to respond to the alert. How does this impact the SLO?"
+"This turnup procedure looks pretty complicated. Do you know why there are so many config files to update when creating a new instance of the service?"
+Counterexamples of leading questions:
+
+"What's up with all of these old, stalled releases?" "Why does the Frobnitzer do so many things?"
+
+Conclusion
+Following the tenets outlined in this chapter provides an SRE team with the following:
+A technical, possibly quantitative, perspective on why they should change. A strong example of what change looks like.
+A logical explanation for much of the "folk wisdom" used by SRE.
+The core principles needed to address novel situations in a scalable manner.
+
+Your final task is to write an after-action report. This report should reiterate your perspective, examples, and explanation. It should also provide some action items for the team to ensure they exercise what you've taught them. You can organize the report as a postvitam,145 explaining the critical decisions at each step that led
+to success.
+
+The bulk of the engagement is now complete. Once your embedded assignment concludes, you should remain available for design and code reviews. Keep an eye on the team for the next few months to confirm that they're slowly improving their capacity planning, emergency response, and rollout processes.
+
+145In contrast to a postmortem.
+
+Chapter 31 - Communication and Collaboration in SRE
+Written by Niall Murphy with Alex Rodriguez, Carl Crous, Dario Freni, Dylan Curley, Lorenzo Blanco, and Todd Underwood
+Edited by Betsy Beyer
+
+The organizational position of SRE in Google is interesting, and has effects on how we communicate and collaborate.
+To begin with, there is a tremendous diversity in what SRE does, and how we do it. We have infrastructural teams, service teams, and horizontal product teams. We have relationships with product development teams ranging from teams that are many times our size, to teams roughly the same size as their counterparts, and situations in which we are the product development team. SRE teams are made up of people with systems engineering or architectural skills (see [Hix15b]), software engineering skills, project management skills, leadership instincts, backgrounds in all kinds of industries (see Lessons Learned from Other Industries), and so on. We don't have just one model, and we have found a variety of configurations that work; this flexibility suits our ultimately pragmatic nature.
+It's also true that SRE is not a command-and-control organization. Generally, we owe allegiance to at least two masters: for service or infrastructure SRE teams, we work closely with the corresponding product development teams that work on those services or that infrastructure; we also obviously work in the context of SRE generally. The service relationship is very strong, since we are held accountable for the performance of those systems, but despite that relationship, our actual reporting lines are through SRE as a whole. Today, we spend more time supporting our individual services than on cross-production work, but our culture and our shared values produce strongly homogeneous approaches to
+problems. This is by design.146
+The two preceding facts have steered the SRE organization in certain directions when it comes to two crucial dimensions of how our teams operate- communications and collaboration. Data flow would be an apt computing
+
+metaphor for our communications: just like data must flow around production, data also has to flow around an SRE team-data about projects, the state of the services, production, and the state of the individuals. For maximum effectiveness of a team, the data has to flow in reliable ways from one interested party to another. One way to think of this flow is to think of the interface that an SRE team must present to other teams, such as an API. Just like an API, a good design is crucial for effective operation, and if the API is wrong, it can be painful to correct later on.
+The API-as-contract metaphor is also relevant for collaboration, both among SRE teams, and between SRE and product development teams-all have to make progress in an environment of unrelenting change. To that extent, our collaboration looks quite like collaboration in any other fast-moving company. The difference is the mix of software engineering skills, systems engineering expertise, and the wisdom of production experience that SRE brings to bear on that collaboration. The best designs and the best implementations result from the joint concerns of production and the product being met in an atmosphere of mutual respect. This is the promise of SRE: an organization charged with reliability, with the same skills as the product development teams, will improve things measurably. Our experience suggests that simply having someone in charge of reliability, without also having the complete skill set, is not enough.
+
+Communications: Production Meetings
+Although literature about running effective meetings abounds [Kra08], it's difficult to find someone who's lucky enough to only have useful, effective meetings. This is equally true for SRE.
+However, there's one kind of meeting that we have that is more useful than the average, called a production meeting. Production meetings are a special kind of meeting where an SRE team carefully articulates to itself-and to its invitees- the state of the service(s) in their charge, so as to increase general awareness among everyone who cares, and to improve the operation of the service(s). In general, these meetings are service-oriented; they are not directly about the status updates of individuals. The goal is for everyone to leave the meeting with an idea of what's going on-the same idea. The other major goal of production meetings is to improve our services by bringing the wisdom of production to bear on our services. That means we talk in detail about the operational
+
+performance of the service, and relate that operational performance to design, configuration, or implementation, and make recommendations for how to fix the problems. Connecting the performance of the service with design decisions in a regular meeting is an immensely powerful feedback loop.
+Our production meetings usually happen weekly; given SRE's antipathy to pointless meetings, this frequency seems to be just about right: time to allow enough relevant material to accumulate to make the meeting worthwhile, while not so frequent that people find excuses to not attend. They usually last somewhere between 30 and 60 minutes. Any less and you're probably cutting something unnecessarily short, or you should probably be growing your service portfolio. Any more and you're probably getting mired in the detail, or you've got too much to talk about and you should shard the team or service set.
+Just like any other meeting, the production meeting should have a chair. Many SRE teams rotate the chair through various team members, which has the advantage of making everyone feel they have a stake in the service and some notional ownership of the issues. It's true that not everyone has equal levels of chairing skill, but the value of group ownership is so large that the trade-off of temporary suboptimality is worthwhile. Furthermore, this is a chance to instill chairing skills, which are very useful in the kind of incident coordination situations commonly faced by SRE.
+In cases where two SRE teams are meeting by video, and one of the teams is much larger than the other, we have noticed an interesting dynamic at play. We recommend placing your chair on the smaller side of the call by default. The larger side naturally tends to quiet down and some of the bad effects of imbalanced  team  sizes  (made  worse  by  the  delays  inherent  in  video
+conferencing) will improve.147 We have no idea if this technique has any scientific basis, but it does tend to work.
+
+Agenda
+
+There are many ways to run a production meeting, attesting to the diversity of what SRE looks after and how we do it. To that extent, it's not appropriate to be prescriptive on how to run one of these meetings. However, a default agenda (see Example Production Meeting Minutes for an example) might look something like the following:
+
+Upcoming production changes
+
+Change-tracking meetings are well known throughout the industry, and indeed whole meetings have often been devoted to stopping change. However, in our production environment, we usually default to enabling change, which requires tracking the useful set of properties of that change: start time, duration, expected effect, and so on. This is near-term horizon visibility.
+Metrics
+
+One of the major ways we conduct a service-oriented discussion is by talking about the core metrics of the systems in question; see Service Level Objectives. Even if the systems didn't dramatically fail that week, it's very common to be in a position where you're looking at gradually (or sharply!) increasing load throughout the year. Keeping track of how your latency figures, CPU utilization figures, etc., change over time is incredibly valuable for developing a feeling for the performance envelope of a system.
+Some teams track resource usage and efficiency, which is also a useful indicator of slower, perhaps more insidious system changes.
+Outages
+
+This item addresses problems of approximately postmortem size, and is an indispensable opportunity for learning. A good postmortem analysis, as discussed in Postmortem Culture: Learning from Failure, should always set the juices flowing.
+Paging events
+
+These are pages from your monitoring system, relating to problems that can be postmortem worthy, but often aren't. In any event, while the Outages portion looks at the larger picture of an outage, this section looks at the tactical view: the list of pages, who was paged, what happened then, and so on. There are two implicit questions for this section: should that alert have paged in the way it did, and should it have paged at all? If the answer to the last question is no, remove those unactionable pages.
+Nonpaging events
+
+This bucket contains three items:
+
+An issue that probably should have paged, but didn't. In these cases, you should probably fix the monitoring so that such events do trigger a page. Often you encounter the issue while you're trying to fix something else, or it's related to a metric you're tracking but for which you haven't got an alert.
+An issue that is not pageable but requires attention, such as low- impact data corruption or slowness in some non-user-facing dimension of the system. Tracking reactive operational work is also appropriate here.
+An issue that is not pageable and does not require attention. These alerts should be removed, because they create extra noise that distracts engineers from issues that do merit attention.
+Prior action items
+
+The preceding detailed discussions often lead to actions that SRE needs to take-fix this, monitor that, develop a subsystem to do the other. Track these improvements just as they would be tracked in any other meeting: assign action items to people and track their progress. It's a good idea to have an explicit agenda item that acts as a catchall, if nothing else. Consistent delivery is also a wonderful credibility and trust builder. It doesn't matter how such delivery is done, just that it is done.
+
+Attendance
+
+Attendance is compulsory for all the members of the SRE team in question. This is particularly true if your team is spread across multiple countries and/or time zones, because this is your major opportunity to interact as a group.
+The major stakeholders should also attend this meeting. Any partner product development teams you may have should also attend. Some SRE teams shard their meeting so SRE-only matters are kept to the first half; that practice is fine, as long as everyone, as stated previously, leaves with the same idea of what's going on. From time to time representatives from other SRE teams might turn up, particularly if there's some larger cross-team issue to discuss, but in general, the SRE team in question plus major other teams should attend. If your relationship is such that you cannot invite your product development partners,
+
+you need to fix that relationship: perhaps the first step is to invite a representative from that team, or to find a trusted intermediary to proxy communication or model healthy interactions. There are many reasons why teams don't get along, and a wealth of writing on how to solve that problem: this information is also applicable to SRE teams, but it is important that the end goal of having a feedback loop from operations is fulfilled, or a large part of the value of having an SRE team is lost.
+Occasionally you'll have too many teams or busy-yet-crucial attendees to invite. There are a number of techniques you can use to handle those situations:
+Less active services might be attended by a single representative from the product development team, or only have commitment from the product development team to read and comment on the agenda minutes.
+If the production development team is quite large, nominate a subset of representatives.
+Busy-yet-crucial attendees can provide feedback and/or steering in advance to individuals, or using the prefilled agenda technique (described next).
+Most of the meeting strategies we've discussed are common sense, with a service-oriented twist. One unique spin on making meetings more efficient and more inclusive is to use the real-time collaborative features of Google Docs. Many SRE teams have such a doc, with a well-known address that anyone in engineering can access. Having such a doc enables two great practices:
+Pre-populating the agenda with "bottom up" ideas, comments, and information.
+Preparing the agenda in parallel and in advance is really efficient.
+
+Fully use the multiple-person collaboration features enabled by the product. There's nothing quite like seeing a meeting chair type in a sentence, then seeing someone else supply a link to the source material in brackets after they have finished typing, and then seeing yet another person tidy up the spelling and grammar in the original sentence. Such collaboration gets stuff done faster, and makes more people feel like they own a slice of what the team does.
+
+Collaboration within SRE
+Obviously, Google is a multinational organization. Because of the emergency
+
+response and pager rotation component of our role, we have very good business reasons to be a distributed organization, separated by at least a few time zones. The practical impact of this distribution is that we have very fluid definitions for "team" compared to, for example, the average product development team. We have local teams, the team on the site, the cross-continental team, virtual teams of various sizes and coherence, and everything in between. This creates a cheerfully chaotic mix of responsibilities, skills, and opportunities. Much of the same dynamics could be expected to pertain to any sufficiently large company (although they might be particularly intense for tech companies). Given that most local collaboration faces no particular obstacle, the interesting case collaboration-wise is cross-team, cross-site, across a virtual team, and similar.
+This pattern of distribution also informs how SRE teams tend to be organized. Because our raison d'�tre is bringing value through technical mastery, and technical mastery tends to be hard, we therefore try to find a way to have mastery over some related subset of systems or infrastructures, in order to decrease cognitive load. Specialization is one way of accomplishing this objective; i.e., team X works only on product Y. Specialization is good, because it leads to higher chances of improved technical mastery, but it's also bad, because it leads to siloization and ignorance of the broader picture. We try to have a crisp team charter to define what a team will-and more importantly, won't-support, but we don't always succeed.
+
+Team Composition
+
+We have a wide array of skill sets in SRE, ranging from systems engineering through software engineering, and into organization and management. The one thing we can say about collaboration is that your chances of successful collaboration-and indeed just about anything else-are improved by having more diversity in your team. There's a lot of evidence suggesting that diverse teams are simply better teams [Nel14]. Running a diverse team implies particular attention to communication, cognitive biases, and so on, which we can't cover in detail here.
+Formally, SRE teams have the roles of "tech lead" (TL), "manager" (SRM), and "project manager" (also known as PM, TPM, PgM). Some people operate best when those roles have well-defined responsibilities: the major benefit of this being they can make in-scope decisions quickly and safely. Others operate best in a more fluid environment, with shifting responsibilities depending on dynamic
+
+negotiation. In general, the more fluid the team is, the more developed it is in terms of the capabilities of the individuals, and the more able the team is to adapt to new situations-but at the cost of having to communicate more and more often, because less background can be assumed.
+Regardless of how well these roles are defined, at a base level the tech lead is responsible for technical direction in the team, and can lead in a variety of ways
+-everything from carefully commenting on everyone's code, to holding quarterly direction presentations, to building consensus in the team. In Google, TLs can do almost all of a manager's job, because our managers are highly technical, but the manager has two special responsibilities that a TL doesn't have: the performance management function, and being a general catchall for everything that isn't handled by someone else. Great TLs, SRMs, and TPMs have a complete set of skills and can cheerfully turn their hand to organizing a project, commenting on a design doc, or writing code as necessary.
+
+Techniques for Working Effectively
+
+There are a number of ways to engineer effectively in SRE.
+
+In general, singleton projects fail unless the person is particularly gifted or the problem is straightforward. To accomplish anythingsignificant, you pretty much need multiple people. Therefore, you also need good collaboration skills. Again, lots of material has been written on this topic, and much of this literature is applicable to SRE.
+In general, good SRE work calls for excellent communication skills when you're working outside the boundary of your purely local team. For collaborations outside the building, effectively working across time zones implies either great written communication, or lots of travel to supply the in-person experience that is deferrable but ultimately necessary for a high-quality relationship. Even if you're a great writer, over time you decay into just being an email address until you turn up in the flesh again.
+
+Case Study of Collaboration in SRE: Viceroy
+One example of a successful cross-SRE collaboration is a project called Viceroy, which  is  a  monitoring  dashboard  framework  and  service.  The  current
+
+organizational architecture of SRE can end up with teams producing multiple, slightly different copies of the same piece of work; for various reasons, monitoring dashboard frameworks were a particularly fertile ground for duplication of work.148
+The incentives that led to the serious litter problem of many smoldering, abandoned hulks of monitoring frameworks lying around were pretty simple: each team was rewarded for developing its own solution, working outside of the team boundary was hard, and the infrastructure that tended to be provided SRE- wide was typically closer to a toolkit than a product. This environment encouraged individual engineers to use the toolkit to make another burning wreck rather than fix the problem for the largest number of people possible (an effort that would therefore take much longer).
+
+The Coming of the Viceroy
+
+Viceroy was different. It began in 2012 when a number of teams were considering how to move to Monarch, the new monitoring system at Google. SRE is deeply conservative with respect to monitoring systems, so Monarch somewhat ironically took a longer while to get traction within SRE than within non-SRE teams. But no one could argue that our legacy monitoring system, Borgmon (see Practical Alerting from Time-Series Data), had no room for improvement. For example, our consoles were cumbersome because they used a custom HTML templating system that was special-cased, full of funky edge cases, and difficult to test. At that time, Monarch had matured enough to be accepted in principle as the replacement for the legacy system and was therefore being adopted by more and more teams across Google, but it turned out we still had a problem with consoles.
+Those of us who tried using Monarch for our services soon found that it fell short in its console support for two main reasons:
+Consoles were easy to set up for a small service, but didn't scale well to services with complex consoles.
+They also didn't support the legacy monitoring system, making the transition to Monarch very difficult.
+Because no viable alternative to deploying Monarch in this way existed at the time, a number of team-specific projects launched. Since there was little enough
+
+in the way of coordinated development solutions or even cross-group tracking at the time (a problem that has since been fixed), we ended up duplicating efforts yet again. Multiple teams from Spanner, Ads Frontend, and a variety of other services spun up their own efforts (one notable example was called Consoles++) over the course of 12-18 months, and eventually sanity prevailed when engineers from all those teams woke up and discovered each other's respective efforts. They decided to do the sensible thing and join forces in order to create a general solution for all of SRE. Thus, the Viceroy project was born in mid 2012.
+By the beginning of 2013, Viceroy had started to gather interest from teams who had yet to move off the legacy system, but who were looking to put a toe in the water. Obviously, teams with larger existing monitoring projects had fewer incentives to move to the new system: it was hard for these teams to rationalize jettisoning the low maintenance cost for their existing solution that basically worked fine, for something relatively new and unproven that would require lots of effort to make work. The sheer diversity of requirements added to the reluctance of these teams, even though all monitoring console projects shared two main requirements, notably:
+Support complex curated dashboards
+Support both Monarch and the legacy monitoring system
+
+Each project also had its own set of technical requirements, which depended on the author's preference or experience. For example:
+Multiple data sources outside the core monitoring systems
+Definition of consoles using configuration versus explicit HTML layout No JavaScript versus full embrace of JavaScript with AJAX
+Sole use of static content, so the consoles can be cached in the browser
+
+Although some of these requirements were stickier than others, overall they made merging efforts difficult. Indeed, although the Consoles++ team was interested in seeing how their project compared to Viceroy, their initial examination in the first half of 2013 determined that the fundamental differences between the two projects were significant enough to prevent integration. The largest difficulty was that Viceroy by design did not use much JavaScript, while Consoles++ was mostly written in JavaScript. There was a glimmer of hope, however, in that the two systems did have a number of underlying similarities:
+
+They used similar syntaxes for HTML template rendering.
+They shared a number of long-term goals, which neither team had yet begun to address. For example, both systems wanted to cache monitoring data and support an offline pipeline to periodically produce data that the console can use, but was too computationally expensive to produce on demand.
+We ended up parking the unified console discussion for a while. However, by the end of 2013, both Consoles++ and Viceroy had developed significantly. Their technical differences had narrowed, because Viceroy had started using JavaScript to render its monitoring graphs. The two teams met and figured out that integration was a lot easier, now that integration boiled down to serving the Consoles++ data out of the Viceroy server. The first integrated prototypes were completed in early 2014, and proved that the systems could work well together. Both teams felt comfortable committing to a joint effort at that point, and because Viceroy had already established its brand as a common monitoring solution, the combined project retained the Viceroy name. Developing full functionality took a few quarters, but by the end of 2014, the combined system was complete.
+Joining forces reaped huge benefits:
+
+Viceroy received a host of data sources and the JavaScript clients to access them.
+JavaScript compilation was rewritten to support separate modules that can be selectively included. This is essential to scale the system to any number of teams with their own JavaScript code.
+Consoles++ benefited from the many improvements actively being made to Viceroy, such as the addition of its cache and background data pipeline.
+Overall, the development velocity on one solution was much larger than the sum of all the development velocity of the duplicative projects.
+Ultimately, the common future vision was the key factor in combining the projects. Both teams found value in expanding their development team and benefited from each other's contributions. The momentum was such that, by the end of 2014, Viceroy was officially declared the general monitoring solution for all of SRE. Perhaps characteristically for Google, this declaration didn't require that teams adopt Viceroy: rather, it recommended that teams should use Viceroy instead of writing another monitoring console.
+
+Challenges
+
+While ultimately a success, Viceroy was not without difficulties, and many of those arose due to the cross-site nature of the project.
+Once the extended Viceroy team was established, initial coordination among remote team members proved difficult. When meeting people for the first time, subtle cues in writing and speaking can be misinterpreted, because communication styles vary substantially from person to person. At the start of the project, team members who weren't located in Mountain View also missed out on the impromptu water cooler discussions that often happened shortly before and after meetings (although communication has since improved considerably).
+While the core Viceroy team remained fairly consistent, the extended team of contributors was fairly dynamic. Contributors had other responsibilities that changed over time, and therefore many were able to dedicate between one and three months to the project. Thus, the developer contributor pool, which was inherently larger than the core Viceroy team, was characterized by a significant amount of churn.
+Adding new people to the project required training each contributor on the overall design and structure of the system, which took some time. On the other hand, when an SRE contributed to the core functionality of Viceroy and later returned to their own team, they were a local expert on the system. That unanticipated dissemination of local Viceroy experts drove more usage and adoption.
+As people joined and left the team, we found that casual contributions were both useful and costly. The primary cost was the dilution of ownership: once features were delivered and the person left, the features became unsupported over time, and were generally dropped.
+Furthermore, the scope of the Viceroy project grew over time. It had ambitious goals at launch but the initial scope was limited. As the scope grew, however, we struggled to deliver core features on time, and had to improve project management and set clearer direction to ensure the project stayed on track.
+Finally, the Viceroy team found it difficult to completely own a component that
+
+had significant (determining) contributions from distributed sites. Even with the best will in the world, people generally default to the path of least resistance and discuss issues or make decisions locally without involving the remote owners, which can lead to conflict.
+
+Recommendations
+
+You should only develop projects cross-site when you have to, but often there are good reasons to have to. The cost of working across sites is higher latency for actions and more communication being required; the benefit is-if you get the mechanics right-much higher throughput. The single site project can also fall foul of no one outside of that site knowing what you're doing, so there are costs to both approaches.
+Motivated contributors are valuable, but not all contributions are equally valuable. Make sure project contributors are actually committed, and aren't just joining with some nebulous self-actualization goal (wanting to earn a notch on their belt attaching their name to a shiny project; wanting to code on a new exciting project without committing to maintaining that project). Contributors with a specific goal to achieve will generally be better motivated and will better maintain their contributions.
+As projects develop, they usually grow, and you're not always in the lucky position of having people in your local team to contribute to the project. Therefore, think carefully about the project structure. The project leaders are important: they provide long-term vision for the project and make sure all work aligns with that vision and is prioritized correctly. You also need to have an agreed way of making decisions, and should specifically optimize for making more decisions locally if there is a high level of agreement and trust.
+The standard "divide and conquer" strategy applies to cross-site projects; you reduce communication costs primarily by splitting the project into as many reasonably sized components as possible, and trying to make sure that each component can be assigned to a small group, preferably within one site. Divide these components among the project subteams, and establish clear deliverables and deadlines. (Try not to let Conway's law distort the natural shape of the
+software too deeply.)149
+A goal for a project team works best when it's oriented toward providing some
+
+functionality or solving some problem. This approach ensures that the individuals working on a component know what is expected of them, and that their work is only complete once that component is fully integrated and used within the main project.
+Obviously, the usual engineering best practices apply to collaborative projects: each component should have design documents and reviews with the team. In this way, everyone in the team is given the opportunity to stay abreast of changes, in addition to the chance to influence and improve designs. Writing things down is one of the major techniques you have to offset physical and/or logical distance-use it.
+Standards are important. Coding style guidelines are a good start, but they're usually quite tactical and therefore only a starting point for establishing team norms. Every time there is a debate around which choice to make on an issue, argue it out fully with the team but with a strict time limit. Then pick a solution, document it, and move on. If you can't agree, you need to pick some arbitrator that everyone respects, and again just move forward. Over time you'll build up a collection of these best practices, which will help new people come up to speed.
+Ultimately, there's no substitute for in-person interaction, although some portion of face-to-face interaction can be deferred by good use of VC and good written communication. If you can, have the leaders of the project meet the rest of the team in person. If time and budget allows, organize a team summit so that all members of the team can interact in person. A summit also provides a great opportunity to hash out designs and goals. For situations where neutrality is important, it's advantageous to hold team summits at a neutral location so that no individual site has the "home advantage."
+Finally, use the project management style that suits the project in its current state. Even projects with ambitious goals will start out small, so the overhead should be correspondingly low. As the project grows, it's appropriate to adapt and change how the project is managed. Given sufficient growth, full project management will be necessary.
+
+Collaboration Outside SRE
+As we suggested, and The Evolving SRE Engagement Model discusses, collaboration between the product development organization and SRE is really at
+
+its best when it occurs early on in the design phase, ideally before any line of code has been committed. SREs are best placed to make recommendations about architecture and software behavior that can be quite difficult (if not impossible) to retrofit. Having that voice present in the room when a new system is being designed goes better for everyone. Broadly speaking, we use the Objectives & Key Results (OKR) process [Kla12] to track such work. For some service teams, such collaboration is the mainstay of what they do-tracking new designs, making recommendations, helping to implement them, and seeing those through to production.
+
+Case Study: Migrating DFP to F1
+Large migration projects of existing services are quite common at Google. Typical examples include porting service components to a new technology or updating components to support a new data format. With the recent introduction of database technologies that can scale to a global level such as Spanner [Cor12] and F1 [Shu13], Google has undertaken a number of large-scale migration projects involving databases. One such project was the migration of the main
+database of DoubleClick for Publishers (DFP)150 from MySQL to F1. In particular, some of this chapter's authors were in charge of a portion of the serving system (shown in Figure 31-1) that continually extracts and processes data from the database, in order to generate a set of indexed files that are then loaded and served around the world. This system was distributed over several datacenters and used about 1,000 CPUs and 8 TB of RAM to index 100 TB of data every day.
+
+
+Figure 31-1. A generic ads serving system
+
+The migration was nontrivial: in addition to migrating to a new technology, the database schema was significantly refactored and simplified thanks to the ability of F1 to store and index protocol buffer data in table columns. The goal was to migrate the processing system so that it could produce an output perfectly identical to the existing system. This allowed us to leave the serving system untouched and to perform, from the user's perspective, a seamless migration. As an added restriction, the product required that we complete a live migration without any disruption of the service to our users at any time. In order to achieve this, the product development team and the SRE team started working closely, from the very beginning, to develop the new indexing service.
+As its main developers, product development teams are typically more familiar with the Business Logic (BL) of the software, and are also in closer contact with the Product Managers and the actual "business need" component of products. On the other hand, SRE teams usually have more expertise pertaining to the infrastructure components of the software (e.g., libraries to talk to distributed storage systems or databases), because SREs often reuse the same building blocks across different services, learning the many caveats and nuances that allow the software to run scalably and reliably over time.
+
+From the start of the migration project, product development and SRE knew they would have to collaborate even more closely, conducting weekly meetings to sync on the project's progress. In this particular case the BL changes were partially dependent upon infrastructure changes. For this reason the project started with the design of the new infrastructure; the SREs, who had extensive knowledge about the domain of extracting and processing data at scale, drove the design of the infrastructure changes. This involved designing how to extract the various tables from F1, how to filter and join the data, how to extract only the data that changed (as opposed to the entire database), how to sustain the loss of some of the machines without impacting the service, how to ensure that the resource usage grows linearly with the amount of extracted data, the capacity planning, and many other similar aspects. The new proposed infrastructure was similar to other services that were already extracting and processing data from F1. Therefore, we could be sure of the soundness of the solution and reuse parts of the monitoring and tooling.
+Before proceeding with the development of this new infrastructure, two SREs produced a detailed design document. Then, both the product development and SRE teams thoroughly reviewed the document, tweaking the solution to handle some edge cases, and eventually agreed on a design plan. Such a plan clearly identified what kind of changes the new infrastructure would bring to the BL. For example, we designed the new infrastructure to extract only changed data, instead of repeatedly extracting the entire database; the BL had to take into account this new approach. Early on, we defined the new interfaces between infrastructure and BL, and doing so allowed the product development team to work independently on the BL changes. Similarly, the product development team kept SRE informed of BL changes. Where they interacted (e.g., BL changes dependent on infrastructure), this coordination structure allowed us to know changes were happening, and to handle them quickly and correctly.
+In later phases of the project, SREs began deploying the new service in a testing environment that resembled the project's eventual finished production environment. This step was essential to measure the expected behavior of the service-in particular, performance and resource utilization-while the development of BL was still underway. The product development team used this testing environment to perform validation of the new service: the index of the ads produced by the old service (running in production) had to match perfectly the index produced by the new service (running in the testing environment). As suspected, the validation process highlighted discrepancies between the old and
+
+new services (due to some edge cases in the new data format), which the product development team was able to resolve iteratively: for each ad they debugged the cause of the difference and fixed the BL that produced the bad output. In the meantime, the SRE team began preparing the production environment: allocating the necessary resources in a different datacenter, setting up processes and monitoring rules, and training the engineers designated to be on-call for the service. The SRE team also set up a basic release process that included validation, a task usually completed by the product development team or by Release Engineers but in this specific case was completed by SREs to speed up the migration.
+When the service was ready the SREs prepared a rollout plan in collaboration with the product development team and launched the new service. The launch was very successful and proceeded smoothly, without any visible user impact.
+
+Conclusion
+Given the globally distributed nature of SRE teams, effective communication has always been a high priority in SRE. This chapter has discussed the tools and techniques that SRE teams use to maintain effective relationships among their team and with their various partner teams.
+Collaboration between SRE teams has its challenges, but potentially great rewards, including common approaches to platforms for solving problems, letting us focus on solving more difficult problems.
+
+146And, as we all know, culture beats strategy every time: [Mer11].
+147The larger team generally tends to unintentionally talk over the smaller team, it's more difficult to control distracting side conversations, etc.
+
+148In this particular case, the road to hell was indeed paved with JavaScript.
+149That is, software has the same structure as the communications structure of the	organization	that	produces	the	software-see https://en.wikipedia.org/wiki/Conway%27s_law.
+
+150DoubleClick for Publishers is a tool for publishers to manage ads served on
+
+their websites and in their apps.
+
+Chapter 32 - The Evolving SRE Engagement Model
+Written by Acacio Cruz and Ashish Bhambhani Edited by Betsy Beyer and Tim Harvey
+
+SRE Engagement: What, How, and Why
+We've discussed in most of the rest of this book what happens when SRE is already in charge of a service. Few services begin their lifecycle enjoying SRE support, so there needs to be a process for evaluating a service, making sure that it merits SRE support, negotiating how to improve any deficits that bar SRE support, and actually instituting SRE support. We call this process onboarding. If you are in an environment where you are surrounded by a lot of existing services in varying states of perfection, your SRE team will probably be running through a prioritized queue of onboardings for quite a while until the team has finished taking on the highest-value targets.
+Although this is very common, and a completely reasonable way of dealing with a fait accompli environment, there are actually at least two better ways of bringing the wisdom of production, and SRE support, to services old and new alike.
+In the first case, just as in software engineering-where the earlier the bug is found, the cheaper it is to fix-the earlier an SRE team consultation happens, the better the service will be and the quicker it will feel the benefit. When SRE is engaged during the earliest stages of design, the time to onboard is lowered and the service is more reliable "out of the gate," usually because we don't have to spend the time unwinding suboptimal design or implementation.
+Another way, perhaps the best, is to short-circuit the process by which specially created systems with lots of individual variations end up "arriving" at SRE's door. Provide product development with a platform of SRE-validated infrastructure, upon which they can build their systems. This platform will have the double benefit of being both reliable and scalable. This avoids certain classes
+
+of cognitive load problems entirely, and by addressing common infrastructure practices, allows product development teams to focus on innovation at the application layer, where it mostly belongs.
+In the following sections, we'll spend some time looking at each of these models in turn, beginning with the "classic" one, the PRR-driven model.
+
+The PRR Model
+The most typical initial step of SRE engagement is the Production Readiness Review (PRR), a process that identifies the reliability needs of a service based on its specific details. Through a PRR, SREs seek to apply what they've learned and experienced to ensure the reliability of a service operating in production. A PRR is considered a prerequisite for an SRE team to accept responsibility for managing the production aspects of a service.
+Figure 32-1 illustrates the lifecycle of a typical service. The Production Readiness Review can be started at any point of the service lifecycle, but the stages at which SRE engagement is applied have expanded over time. This chapter describes the Simple PRR Model, then discusses how its modification into the Extended Engagement Model and the Frameworks and SRE Platform structure allowed SRE to scale their engagement process and impact.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 32-1. A typical service lifecycle
+
+The SRE Engagement Model
+SRE seeks production responsibility for important services for which it can make concrete contributions to reliability. SRE is concerned with several aspects of a service, which are collectively referred to as production. These aspects include the following:
+System architecture and interservice dependencies Instrumentation, metrics, and monitoring Emergency response
+Capacity planning Change management
+Performance: availability, latency, and efficiency
+
+When SREs engage with a service, we aim to improve it along all of these axes, which makes managing production for the service easier.
+
+Alternative Support
+
+Not all Google services receive close SRE engagement. A couple of factors are at play here:
+Many services don't need high reliability and availability, so support can be provided by other means.
+By design, the number of development teams that request SRE support exceeds the available bandwidth of SRE teams (see Introduction).
+When SRE can't provide full-fledged support, it provides other options for making improvements to production, such as documentation and consultation.
+
+Documentation
+
+Development guides are available for internal technologies and clients of widely used systems. Google's Production Guide documents production best practices for services, as determined by the experiences of SRE and development teams alike. Developers can implement the solutions and recommendations in such
+
+documentation to improve their services.
+
+Consultation
+
+Developers may also seek SRE consulting to discuss specific services or problem areas. The Launch Coordination Engineering (LCE) team (see Reliable Product Launches at Scale) spends a majority of its time consulting with development teams. SRE teams that aren't specifically dedicated to launch consultations also engage in consultation with development teams.
+When a new service or a new feature has been implemented, developers usually consult with SRE for advice about preparing for the Launch phase. Launch consultation usually involves one or two SREs spending a few hours studying the design and implementation at a high level. The SRE consultants then meet with the development team to provide advice on risky areas that need attention and to discuss well-known patterns or solutions that can be incorporated to improve the service in production. Some of this advice may come from the Production Guide mentioned earlier.
+Consultation sessions are necessarily broad in scope because it's not possible to gain a deep understanding of a given system in the limited time available. For some development teams, consultation is not sufficient:
+Services that have grown by orders of magnitude since they launched, which now require more time to understand than is feasible through documentation and consultation.
+Services upon which many other services have subsequently come to rely upon, which now host significantly more traffic from many different clients.
+These types of services may have grown to the point at which they begin to encounter significant difficulties in production while simultaneously becoming important to users. In such cases, long-term SRE engagement becomes necessary to ensure that they are properly maintained in production as they grow.
+
+Production Readiness Reviews: Simple PRR Model
+When a development team requests that SRE take over production management
+
+of a service, SRE gauges both the importance of the service and the availability of SRE teams. If the service merits SRE support, and the SRE team and development organization agree on staffing levels to facilitate this support, SRE initiates a Production Readiness Review with the development team.
+The objectives of the Production Readiness Review are as follows:
+
+Verify that a service meets accepted standards of production setup and operational readiness, and that service owners are prepared to work with SRE and take advantage of SRE expertise.
+Improve the reliability of the service in production, and minimize the number and severity of incidents that might be expected. A PRR targets all aspects of production that SRE cares about.
+After sufficient improvements are made and the service is deemed ready for SRE support, an SRE team assumes its production responsibilities.
+This brings us to the Production Readiness Review process itself. There are three different but related engagement models (Simple PRR Model, Early Engagement Model, and Frameworks and SRE Platform), which will be discussed in turn.
+We will first describe the Simple PRR Model, which is usually targeted at a service that is already launched and will be taken over by an SRE team. A PRR follows several phases, much like a development lifecycle, although it may proceed independently in parallel with the development lifecycle.
+
+Engagement
+
+SRE leadership first decides which SRE team is a good fit for taking over the service. Usually one to three SREs are selected or self-nominated to conduct the PRR process. This small group then initiates discussion with the development team. The discussion covers matters such as:
+Establishing an SLO/SLA for the service
+Planning for potentially disruptive design changes required to improve reliability
+Planning and training schedules
+
+The goal is to arrive at a common agreement about the process, end goals, and
+
+outcomes that are necessary for the SRE team to engage with the development team and their service.
+
+Analysis
+
+Analysis is the first large segment of work. During this phase, the SRE reviewers learn about the service and begin analyzing it for production shortcomings. They aim to gauge the maturity of the service along the various axes of concern to SRE. They also examine the service's design and implementation to check if it follows production best practices. Usually, the SRE team establishes and maintains a PRR checklist explicitly for the Analysis phase. The checklist is specific to the service and is generally based on domain expertise, experience with related or similar systems, and best practices from the Production Guide. The SRE team may also consult other teams that have more experience with certain components or dependencies of the service.
+A few examples of checklist items include:
+
+Do updates to the service impact an unreasonably large percentage of the system at once?
+Does the service connect to the appropriate serving instance of its dependencies? For example, end-user requests to a service should not depend on a system that is designed for a batch-processing use case.
+Does the service request a sufficiently high network quality-of-service when talking to a critical remote service?
+Does the service report errors to central logging systems for analysis? Does it report all exceptional conditions that result in degraded responses or failures to the end users?
+Are all user-visible request failures well instrumented and monitored, with suitable alerting configured?
+The checklist may also include operational standards and best practices followed by a specific SRE team. For example, a perfectly functional service configuration that doesn't follow an SRE team's "gold standard" might be refactored to work better with SRE tools for scalably managing configurations. SREs also look at recent incidents and postmortems for the service, as well as follow-up tasks for the incidents. This evaluation gauges the demands of emergency response for the service and the availability of well-established operational controls.
+
+Improvements and Refactoring
+
+The Analysis phase leads to the identification of recommended improvements for the service. This next phase proceeds as follows:
+1. Improvements are prioritized based upon importance for service reliability.
+2. The priorities are discussed and negotiated with the development team, and a plan of execution is agreed upon.
+3. Both SRE and product development teams participate and assist each other in refactoring parts of the service or implementing additional features.
+This phase typically varies the most in duration and amount of effort. How much time and effort this phase will involve depends upon the availability of engineering time for refactoring, the maturity and complexity of the service at the start of the review, and myriad other factors.
+
+Training
+
+Responsibility for managing a service in production is generally assumed by an entire SRE team. To ensure that the team is prepared, the SRE reviewers who led the PRR take ownership of training the team, which includes the documentation necessary to support the service. Typically with the help and participation of the development team, these engineers organize a series of training sessions and exercises. Instruction can include:
+Design overviews
+Deep dives on various request flows in the system A description of the production setup
+Hands-on exercises for various aspects of system operations
+
+When the training is concluded, the SRE team should be prepared to manage the service.
+
+Onboarding
+
+The Training phase unblocks onboarding of the service by the SRE team. It involves a progressive transfer of responsibilities and ownership of various production aspects of the service, including parts of operations, the change management process, access rights, and so forth. The SRE team continues to
+
+focus on the various areas of production mentioned earlier. To complete the transition, the development team must be available to back up and advise the SRE team for a period of time as it settles in managing production for the service. This relationship becomes the basis for the ongoing work between the teams.
+
+Continuous Improvement
+
+Active services continuously change in response to new demands and conditions, including user requests for new features, evolving system dependencies, and technology upgrades, in addition to other factors. The SRE team must maintain service reliability standards in the face of these changes by driving continuous improvement. The responsible SRE team naturally learns more about the service in the course of operating the service, reviewing new changes, responding to incidents, and especially when conducting postmortems/root cause analyses. This expertise is shared with the development team as suggestions and proposals for changes to the service whenever new features, components, and dependencies may be added to the service. Lessons from managing the service are also contributed to best practices, which are documented in the Production Guide and elsewhere.
+
+Engaging with Shakespeare
+
+
+Initially, the developers of the Shakespeare service were responsible for the product, including carrying the pager for emergency response. However, with growing use of the service and the growth of the revenue coming from the service, SRE support became desirable. The product has already been launched, so SRE conducted a Production Readiness Review. One of the things they found was that the dashboards were not completely covering some of the metrics defined in the SLO, so that needed to be fixed. After all the issues that had been filed had been fixed, SRE took over the pager for the service, though two developers were in the on-call rotation as well. The developers are participating in the weekly on-call meeting discussing last week's problems and how to handle upcoming large-scale maintenance or cluster turndowns. Also future plans for the service are now discussed with the SREs to make sure that new launches will go flawlessly (though Murphy's law is always looking for opportunities to spoil that).
+
+Evolving the Simple PRR Model: Early Engagement
+
+Thus far, we've discussed the Production Readiness Review as it's used in the Simple PRR Model, which is limited to services that have already entered the Launch phase. There are several limitations and costs associated with this model. For example:
+Additional communication between teams can increase some process overhead for the development team, and cognitive burden for the SRE reviewers.
+The right SRE reviewers must be available, and capable of managing their time and priorities with regards to their existing engagements.
+Work done by SREs must be highly visible and sufficiently reviewed by the development team to ensure effective knowledge sharing. SREs should essentially work as a part of the development team, rather than an external unit.
+However, the main limitations of the PRR Model stem from the fact that the service is launched and serving at scale, and the SRE engagement starts very late in the development lifecycle. If the PRR occurred earlier in the service lifecycle, SRE's opportunity to remedy potential issues in the service would be markedly increased. As a result, the success of the SRE engagement and the future success of the service itself would likely improve. The resulting drawbacks can pose a significant challenge to the success of the SRE engagement and the future success of the service itself.
+
+Candidates for Early Engagement
+
+The Early Engagement Model introduces SRE earlier in the development lifecycle in order to achieve significant additional advantages. Applying the Early Engagement Model requires identifying the importance and/or business value of a service early in the development lifecycle, and determining if the service will have sufficient scale or complexity to benefit from SRE expertise. Applicable services often have the following characteristics:
+The service implements significant new functionality and will be part of an existing system already managed by SRE.
+The service is a significant rewrite or alternative to an existing system, targeting the same use cases.
+
+The development team sought SRE advice or approached SRE for takeover upon launch.
+The Early Engagement Model essentially immerses SREs in the development process. SRE's focus remains the same, though the means to achieve a better production service are different. SRE participates in Design and later phases, eventually taking over the service any time during or after the Build phase. This model is based on active collaboration between the development and SRE teams.
+
+Benefits of the Early Engagement Model
+
+While the Early Engagement Model does entail certain risks and challenges discussed previously, additional SRE expertise and collaboration during the entire lifecycle of the product creates significant benefits compared to an engagement initiated later in the service lifecycle.
+
+Design phase
+
+SRE collaboration during the Design phase can prevent a variety of problems or incidents from occurring later in production. While design decisions can be reversed or rectified later in the development lifecycle, such changes come at a high cost in terms of effort and complexity. The best production incidents are those that never happen!
+Occasionally, difficult trade-offs lead to the selection of a less-than-ideal design. Participation in the Design phase means that SREs are aware up front of the trade-offs and are part of the decision to pick a less-than-ideal option. Early SRE involvement aims to minimize future disputes over design choices once the service is in production.
+
+Build and implementation
+
+The Build phase addresses production aspects such as instrumentation and metrics, operational and emergency controls, resource usage, and efficiency. During this phase, SRE can influence and improve the implementation by recommending specific existing libraries and components, or helping build certain controls into the system. SRE participation at this stage helps enable ease of operations in the future and allows SRE to gain operational experience in
+
+advance of the launch.
+
+Launch
+
+SRE can also help implement widely used launch patterns and controls. For example, SRE might help implement a "dark launch" setup, in which part of the traffic from existing users is sent to the new service in addition to being sent to the live production service. The responses from the new service are "dark" since they are thrown away and not actually shown to users. Practices such as dark launches allow the team to gain operational insight, resolve issues without impacting existing users, and reduce the risk of encountering issues after launch. A smooth launch is immensely helpful in keeping the operational burden low and maintaining the development momentum after the launch. Disruptions around launch can easily result in emergency changes to source code and production, and disrupt the development team's work on future features.
+
+Post-launch
+
+Having a stable system at launch time generally leads to fewer conflicting priorities for the development team in terms of choosing between improving service reliability versus adding new features. In later phases of the service, the lessons from earlier phases can better inform refactoring or redesign.
+With extended involvement, the SRE team can be ready to take over the new service much sooner than is possible with the Simple PRR Model. The longer and closer engagement between the SRE and development teams also creates a collaborative relationship that can be sustained long term. A positive cross-team relationship fosters a mutual feeling of solidarity, and helps SRE establish ownership of the production responsibility.
+
+Disengaging from a service
+
+Sometimes a service doesn't warrant full-fledged SRE team management-this determination might be made post-launch, or SRE might engage with a service but never officially take it over. This is a positive outcome, because the service has been engineered to be reliable and low maintenance, and can therefore remain with the development team.
+
+It is also possible that SRE engages early with a service that fails to meet the levels of usage projected. In such cases, the SRE effort spent is simply part of the overall business risk that comes with new projects, and a small cost relative to the success of projects that meet expected scale. The SRE team can be reassigned, and lessons learned can be incorporated into the engagement process.
+
+Evolving Services Development: Frameworks and SRE Platform
+The Early Engagement Model made strides in evolving SRE engagement beyond the Simple PRR Model, which applied only to services that had already launched. However, there was still progress to be made in scaling SRE engagement to the next level by designing for reliability.
+
+Lessons Learned
+
+Over time, the SRE engagement model described thus far produced several distinct patterns:
+Onboarding each service required two or three SREs and typically lasted two or three quarters. The lead times for a PRR were relatively high (quarters away). The effort level required was proportional to the number of services under review, and was constrained by the insufficient number of SREs available to conduct PRRs. These conditions led to serialization of service takeovers and strict service prioritization.
+Due to differing software practices across services, each production feature was implemented differently. To meet PRR-driven standards, features usually had to be reimplemented specifically for each service or, at best, once for each small subset of services sharing code. These reimplementations were a waste of engineering effort. One canonical example is the implementation of functionally similar logging frameworks repeatedly in the same language because different services didn't implement the same coding structure.
+A review of common service issues and outages revealed certain patterns, but there was no way to easily replicate fixes and improvements across services. Typical examples included service overload situations and data hot-spotting.
+SRE software engineering contributions were often local to the service.
+
+Thus, building generic solutions to be reused was difficult. As a consequence, there was no easy way to implement new lessons individual SRE teams learned and best practices across services that had already been onboarded.
+
+External Factors Affecting SRE
+
+External factors have traditionally pressured the SRE organization and its resources in several ways.
+Google is increasingly following the industry trend of moving toward microservices.151 As a result, both the number of requests for SRE support and the cardinality of services to support have increased. Because each service has a base  fixed  operational  cost,  even  simple  services  demand  more  staffing.
+Microservices also imply an expectation of lower lead time for deployment, which was not possible with the previous PRR model (which had a lead time of months).
+Hiring experienced, qualified SREs is difficult and costly. Despite enormous effort from the recruiting organization, there are never enough SREs to support all the services that need their expertise. Once SREs are hired, their training is also a lengthier process than is typical for development engineers.
+Finally, the SRE organization is responsible for serving the needs of the large and growing number of development teams that do not already enjoy direct SRE support. This mandate calls for extending the SRE support model far beyond the original concept and engagement model.
+
+Toward a Structural Solution: Frameworks
+
+To effectively respond to these conditions, it became necessary to develop a model that allowed for the following principles:
+Codified best practices
+
+The ability to commit what works well in production to code, so services can simply use this code and become "production ready" by design.
+Reusable solutions
+
+Common and easily shareable implementations of techniques used to mitigate scalability and reliability issues.
+A common production platform with a common control surface
+
+Uniform sets of interfaces to production facilities, uniform sets of operational controls, and uniform monitoring, logging, and configuration for all services.
+Easier automation and smarter systems
+
+A common control surface that enables automation and smart systems at a level not possible before. For example, SREs can readily receive a single view of relevant information for an outage, rather than hand collecting and analyzing mostly raw data from disparate sources (logs, monitoring data, and so on).
+Based upon these principles, a set of SRE-supported platform and service frameworks were created, one for each environment we support(Java, C++, Go). Services built using these frameworks share implementations that are designed to work with the SRE-supported platform, and are maintained by both SRE and development teams. The main shift brought about by frameworks was to enable product development teams to design applications using the framework solution that was built and blessed by SRE, as opposed to either retrofitting the application to SRE specifications after the fact, or retrofitting more SREs to support a service that was markedly different than other Google services.
+An application typically comprises some business logic, which in turn depends on various infrastructure components. SRE production concerns are largely focused on the infrastructure-related parts of a service. The service frameworks implement infrastructure code in a standardized fashion and address various production concerns. Each concern is encapsulated in one or more framework modules, each of which provides a cohesive solution for a problem domain or infrastructure dependency. Framework modules address the various SRE concerns enumerated earlier, such as:
+Instrumentation and metrics Request logging
+Control systems involving traffic and load management
+
+SRE builds framework modules to implement canonical solutions for the concerned production area. As a result, development teams can focus on the business logic, because the framework already takes care of correct infrastructure use.
+A framework essentially is a prescriptive implementation for using a set of software components and a canonical way of combining these components. The framework can also expose features that control various components in a cohesive manner. For example, a framework might provide the following:
+Business logic organized as well-defined semantic components that can be referenced using standard terms
+Standard dimensions for monitoring instrumentation A standard format for request debugging logs
+A standard configuration format for managing load shedding
+Capacity of a single server and determination of "overload" that can both use a semantically consistent measure for feedback to various control systems
+Frameworks provide multiple upfront gains in consistency and efficiency. They free developers from having to glue together and configure individual components in an ad hoc service-specific manner, in ever-so-slightly incompatible ways, that then have to be manually reviewed by SREs. They drive a single reusable solution for production concerns across services, which means that framework users end up with the same common implementation and minimal configuration differences.
+Google supports several major languages for application development, and frameworks are implemented across all of these languages. While different implementations of the framework (say in C++ versus Java) can't share code, the goal is to expose the same API, behavior, configuration, and controls for identical functionality. Therefore, development teams can choose the language platform that fits their needs and experience, while SREs can still expect the same familiar behavior in production and standard tools to manage the service.
+
+New Service and Management Benefits
+
+The structural approach, founded on service frameworks and a common production platform and control surface, provided a host of new benefits.
+
+Significantly lower operational overhead
+
+A production platform built on top of frameworks with stronger conventions significantly reduced operational overhead, for the following reasons:
+It supports strong conformance tests for coding structure, dependencies, tests, coding style guides, and so on. This functionality also improves user data privacy, testing, and security conformance.
+It features built-in service deployment, monitoring, and automation for all services.
+It facilitates easier management of large numbers of services, especially micro-services, which are growing in number.
+It enables much faster deployment: an idea can graduate to fully deployed SRE-level production quality in a matter of days!
+
+Universal support by design
+
+The constant growth in the number of services at Google means that most of these services can neither warrant SRE engagement nor be maintained by SREs. Regardless, services that don't receive full SRE support can be built to use production features that are developed and maintained by SREs. This practice effectively breaks the SRE staffing barrier. Enabling SRE-supported production standards and tools for all teams improves the overall service quality across Google. Furthermore, all services that are implemented with frameworks automatically benefit from improvements made over time to frameworks modules.
+
+Faster, lower overhead engagements
+
+The frameworks approach results in faster PRR execution because we can rely upon:
+Built-in service features as part of the framework implementation
+Faster service onboarding (usually accomplished by a single SRE during one quarter)
+Less cognitive burden for the SRE teams managing services built using frameworks
+
+These properties allow SRE teams to lower the assessment and qualification effort for service onboarding, while maintaining a high bar on service production quality.
+
+A new engagement model based on shared responsibility
+
+The original SRE engagement model presented only two options: either full SRE support, or approximately no SRE engagement.152
+A production platform with a common service structure, conventions, and software infrastructure made it possible for an SRE team to provide support for the "platform" infrastructure, while the development teams provide on-call support for functional issues with the service-that is, for bugs in the application code. Under this model, SREs assume responsibility for the development and maintenance of large parts of service software infrastructure, particularly control systems such as load shedding, overload, automation, traffic management, logging, and monitoring.
+This model represents a significant departure from the way service management was originally conceived in two major ways: it entails a new relationship model for the interaction between SRE and development teams, and a new staffing model for SRE-supported service management.153
+
+Part V - Conclusions
+Having covered much ground in terms of how SRE works at Google, and how the principles and practices we've developed might be applied to other organizations in our field, it now seems appropriate to turn our view to Lessons Learned from Other Industries, to examine how SRE's practices compare to other industries where reliability is critically important.
+Finally, Google's VP for Site Reliability Engineering, Benjamin Lutch, writes about SRE's evolution over the course of his career in his conclusion, examining SRE through the lens of some observations on the aviation industry.
+
+Chapter 33 - Lessons Learned from Other Industries
+Written by Jennifer Petoff Edited by Betsy Beyer
+A deep dive into SRE culture and practices at Google naturally leads to the question of how other industries manage their businesses for reliability. Compiling this book on Google SRE created an opportunity to speak to a number of Google's engineers about their previous work experiences in a variety of other high-reliability fields in order to address the following comparative questions:
+Are the principles used in Site Reliability Engineering also important outside of Google, or do other industries tackle the requirements of high reliability in markedly different ways?
+If other industries also adhere to SRE principles, how are the principles manifested?
+What are the similarities and differences in the implementation of these principles across industries?
+What factors drive similarities and differences in implementation? What can Google and the tech industry learn from these comparisons?
+A number of principles fundamental to Site Reliability Engineering at Google are discussed throughout this text. To simplify our comparison of best practices in other industries, we distilled these concepts into four key themes:
+Preparedness and Disaster Testing Postmortem Culture
+Automation and Reduced Operational Overhead Structured and Rational Decision Making
+This chapter introduces the industries that we profiled and the industry veterans we interviewed. We define key SRE themes, discuss how these themes are implemented at Google, and give examples of how these principles reveal
+
+themselves in other industries for comparative purposes. We conclude with some insights and discussion on the patterns and anti-patterns we discovered.
+
+Meet Our Industry Veterans
+Peter Dahl is a Principal Engineer at Google. Previously, he worked as a defense contractor on several high-reliability systems including many airborne and wheeled vehicle GPS and inertial guidance systems. Consequences of a lapse in reliability in such systems include vehicle malfunction or loss, and the financial consequences associated with that failure.
+Mike Doherty is a Site Reliability Engineer at Google. He worked as a lifeguard and lifeguard trainer for a decade in Canada. Reliability is absolutely essential by nature in this field, because lives are on the line every day.
+Erik Gross is currently a software engineer at Google. Before joining the company, he spent seven years designing algorithms and code for the lasers and systems used to perform refractive eye surgery (e.g., LASIK). This is a high- stakes, high-reliability field, in which many lessons relevant to reliability in the face of government regulations and human risk were learned as the technology received FDA approval, gradually improved, and finally became ubiquitous.
+Gus Hartmann and Kevin Greer have experience in the telecommunications industry, including maintaining the E911 emergency response system.154 Kevin is currently a software engineer on the Google Chrome team and Gus is a systems engineer for Google's Corporate Engineering team. User expectations of
+the telecom industry demand high reliability. Implications of a lapse of service range from user inconvenience due to a system outage to fatalities if E911 goes down.
+Ron Heiby is a Technical Program Manager for Site Reliability Engineering at Google. Ron has experience in development for cell phones, medical devices, and the automotive industry. In some cases he worked on interface components of these industries (for example, on a device to allow EKG readings155 in
+ambulances to be transmitted over the digital wireless phone network). In these industries, the impact of a reliability issue can range from harm to the business incurred by equipment recalls to indirectly impacting life and health (e.g., people not getting the medical attention they need if the EKG cannot communicate with
+
+the hospital).
+
+Adrian Hilton is a Launch Coordination Engineer at Google. Previously, he worked on UK and USA military aircraft, naval avionics and aircraft stores management systems, and UK railway signaling systems. Reliability is critical in this space because impact of incidents ranges from multimillion-dollar loss of equipment to injuries and fatalities.
+Eddie Kennedy is a project manager for the Global Customer Experience team at Google and a mechanical engineer by training. Eddie spent six years working as a Six Sigma Black Belt process engineer in a manufacturing facility that makes synthetic diamonds. This industry is characterized by a relentless focus on safety, because the extremes of temperature and pressure demands of the process pose a high level of danger to workers on a daily basis.
+John Li is currently a Site Reliability Engineer at Google. John previously worked as a systems administrator and software developer at a proprietary trading company in the finance industry. Reliability issues in the financial sector are taken quite seriously because they can lead to serious fiscal consequences.
+Dan Sheridan is a Site Reliability Engineer at Google. Before joining the company, he worked as a safety consultant in the civil nuclear industry in the UK. Reliability is important in the nuclear industry because an incident can have serious repercussions: outages can incur millions a day in lost revenue, while risks to workers and those in the community are even more dire, dictating zero tolerance for failure. Nuclear infrastructure is designed with a series of failsafes that halt operations before an incident of any such magnitude is reached.
+Jeff Stevenson is currently a hardware operations manager at Google. He has past experience as a nuclear engineer in the US Navy on a submarine. Reliability stakes in the nuclear Navy are high-problems that arise in the case of incidents range from damaged equipment, to long-standing environmental impact, to potential loss of life.
+Matthew Toia is a Site Reliability Manager focused on storage systems. Prior to Google, he worked on software development and deployment of air traffic control software systems. Effects from incidents in this industry range from inconveniences to passengers and airlines (e.g., delayed flights, diverted planes) to potential loss of life in the event of a crash. Defense in depth is a key strategy
+
+to avoiding catastrophic failures.
+
+Now that you've met our experts and gained a high-level understanding of why reliability is important in their respective former fields, we'll delve into the four key themes of reliability.
+
+Preparedness and Disaster Testing
+"Hope is not a strategy." This rallying cry of the SRE team at Google sums up what we mean by preparedness and disaster testing. The SRE culture is forever vigilant and constantly questioning: What could go wrong? What action can we take to address those issues before they lead to an outage or data loss? Our annual Disaster and Recovery Testing (DiRT) drills seek to address these questions head-on [Kri12]. In DiRT exercises, SREs push production systems to the limit and inflict actual outages in order to:
+Ensure that systems react the way we think they will Determine unexpected weaknesses
+Figure out ways to make the systems more robust in order to prevent uncontrolled outages
+Several strategies for testing disaster readiness and ensuring preparedness in other industries emerged from our conversations. Strategies included the following:
+Relentless organizational focus on safety Attention to detail
+Swing capacity Simulations and live drills Training and certification
+Obsessive focus on detailed requirements gathering and design Defense in depth
+
+Relentless Organizational Focus on Safety
+
+This principle is particularly important in an industrial engineering context. According to Eddie Kennedy, who worked on a manufacturing floor where workers faced safety hazards, "every management meeting started with a discussion  of  safety."  The  manufacturing  industry  prepares  itself  for  the
+
+unexpected by establishing highly defined processes that are strictly followed at every level of the organization. It is critical that all employees take safety seriously, and that workers feel empowered to speak up if and when anything seems amiss. In the case of nuclear power, military aircraft, and railway signaling industries, safety standards for software are well detailed (e.g., UK Defence Standard 00-56, IEC 61508, IEC513, US DO-178B/C, and DO-254)
+and levels of reliability for such systems are clearly identified (e.g., Safety Integrity Level (SIL) 1-4),156 with the aim of specifying acceptable approaches to delivering a product.
+
+Attention to Detail
+
+From his time spent in the US Navy, Jeff Stevenson recalls an acute awareness of how a lack of diligence in executing small tasks (for example, lube oil maintenance) could lead to major submarine failure. A very small oversight or mistake can have big effects. Systems are highly interconnected, so an accident in one area can impact multiple related components. The nuclear Navy focuses on routine maintenance to ensure that small issues don't snowball.
+
+Swing Capacity
+
+System utilization in the telecom industry can be highly unpredictable. Absolute capacity can be strained by unforeseeable events such as natural disasters, as well as large, predictable events like the Olympics. According to Gus Hartmann, the industry deals with these incidents by deploying swing capacity in the form of a SOW (switch on wheels), a mobile telco office. This excess capacity can be rolled out in an emergency or in anticipation of a known event that is likely to overload the system. Capacity issues veer into the unexpected in matters unrelated to absolute capacity, as well. For example, when a celebrity's private phone number was leaked in 2005 and thousands of fans simultaneously attempted to call her, the telecom system exhibited symptoms similar to a DDoS or massive routing error.
+
+Simulations and Live Drills
+
+Google's Disaster Recovery tests have a lot in common with the simulations and live drills that are a key focus of many of the established industries we researched. The potential consequences of a system outage determine whether
+
+using a simulation or a live drill is appropriate. For example, Matthew Toia points out that the aviation industry can't perform a live test "in production" without putting equipment and passengers at risk. Instead, they employ extremely realistic simulators with live data feeds, in which the control rooms and equipment are modeled down to the tiniest details to ensure a realistic experience without putting real people at risk. Gus Hartmann reports that the telecom industry typically focuses on live drills centered on surviving hurricanes and other weather emergencies. Such modeling led to the creation of weatherproof facilities with generators inside the building capable of outlasting a storm.
+The US nuclear Navy uses a mixture of "what if" thought exercises and live drills. According to Jeff Stevenson, the live drills involve "actually breaking real stuff but with control parameters. Live drills are carried out religiously, every week, two to three days per week."For the nuclear Navy, thought exercises are useful, but not sufficient to prepare for actual incidents. Responses must be practiced so they are not forgotten.
+According to Mike Doherty, lifeguards face disaster testing exercises more akin to a "mystery shopper" experience. Typically, a facility manager works with a child or an incognito lifeguard in training to stage a mock drowning. These scenarios are conducted to be as realistic as possible so that lifeguards aren't able to differentiate between real and staged emergencies.
+
+Training and Certification
+
+Our interviews suggest that training and certification are particularly important when lives are at stake. For example, Mike Doherty described how lifeguards complete a rigorous training certification, in addition to a periodic recertification process. Courses include fitness components (e.g., a lifeguard must be able to hold someone heavier than themselves with shoulders out of the water), technical components like first aid and CPR, and operational elements (e.g., if a lifeguard enters the water, how do other team members respond?). Every facility also has site-specific training, because lifeguarding in a pool is markedly different from lifeguarding on a lakeside beach or on the ocean.
+
+Focus on Detailed Requirements Gathering and Design
+
+Some of the engineers we interviewed discussed the importance of detailed
+
+requirements gathering and design docs. This practice was particularly important when working with medical devices. In many of these cases, actual use or maintenance of the equipment doesn't fall within the purview of product designers. Thus, usage and maintenance requirements must be gathered from other sources.
+For example, according to Erik Gross, laser eye surgery machines are designed to be as foolproof as possible. Thus, soliciting requirements from the surgeons who actually use these machines and the technicians responsible for maintaining them is particularly important. In another example, former defense contractor Peter Dahl described a very detailed design culture in which creating a new defense system commonly entailed an entire year of design, followed by just three weeks of writing the code to actualize the design. Both of these examples are markedly different from Google's launch and iterate culture, which promotes a much faster rate of change at a calculated risk. Other industries (e.g., the medical industry and the military, as previously discussed) have very different pressures, risk appetites, and requirements, and their processes are very much informed by these circumstances.
+
+Defense in Depth and Breadth
+
+In the nuclear power industry, defense in depth is a key element to preparedness [IAEA12]. Nuclear reactors feature redundancy on all systems and implement a design methodology that mandates fallback systems behind primary systems in case of failure. The system is designed with multiple layers of protection, including a final physical barrier to radioactive release around the plant itself. Defense in depth is particularly important in the nuclear industry due to the zero tolerance for failures and incidents.
+
+Postmortem Culture
+
+Corrective and preventative action (CAPA)157 is a well-known concept for improving reliability that focuses on the systematic investigation of root causes of identified issues or risks in order to prevent recurrence. This principle is embodied by SRE's strong culture of blameless postmortems. When something goes wrong (and given the scale, complexity, and rapid rate of change at Google, something inevitably will go wrong), it's important to evaluate all of the following:
+
+What happened
+The effectiveness of the response
+What we would do differently next time
+What actions will be taken to make sure a particular incident doesn't happen again
+This exercise is undertaken without pointing fingers at any individual. Instead of assigning blame, it is far more important to figure out what went wrong, and how, as an organization, we will rally to ensure it doesn't happen again. Dwelling on who might have caused the outage is counterproductive. Postmortems are conducted after incidents and published across SRE teams so that all can benefit from the lessons learned.
+Our interviews uncovered that many industries perform a version of the postmortem (although many do not use this specific moniker, for obvious reasons). The motivation behind these exercises appears to be the main differentiator among industry practices.
+Many industries are heavily regulated and are held accountable by specific government authorities when something goes wrong. Such regulation is especially ingrained when the stakes of failure are high (e.g., lives are at stake). Relevant government agencies include the FCC (telecommunications), FAA (aviation), OSHA (the manufacturing and chemical industries), FDA (medical
+devices), and the various National Competent Authorities in the EU.158 The nuclear power and transportation industries are also heavily regulated.
+Safety considerations are another motivating factor behind postmortems. In the manufacturing and chemical industries, the risk of injury or death is ever-present due to the nature of the conditions required to produce the final product (high temperature, pressure, toxicity, and corrosivity, to name a few). For example, Alcoa features a noteworthy safety culture. Former CEO Paul O'Neill required staff to notify him within 24 hours of any injury that lost a worker day. He even distributed his home phone number to workers on the factory floor so that they
+could personally alert him to safety concerns.159
+The stakes are so high in the manufacturing and chemical industries that even "near misses"-when a given event could have caused serious harm, but did not
+-are carefully scrutinized. These scenarios function as a type of preemptive postmortem. According to VM Brasseur in a talk given at YAPC NA 2015,
+
+"There are multiple near misses in just about every disaster and business crisis, and typically they're ignored at the time they occur. Latent error, plus an enabling condition, equals things not working quite the way you planned" [Bra15]. Near misses are effectively disasters waiting to happen. For example, scenarios in which a worker doesn't follow the standard operating procedure, an employee jumps out of the way at the last second to avoid a splash, or a spill on the staircase isn't cleaned up, all represent near misses and opportunities to learn and improve. Next time, the employee and the company might not be so lucky. The United Kingdom's CHIRP (Confidential Reporting Programme for Aviation and Maritime) seeks to raise awareness about such incidents across the industry by providing a central reporting point where aviation and maritime personnel can report near misses confidentially. Reports and analyses of these near misses are then published in periodic newsletters.
+Lifeguarding has a deeply embedded culture of post-incident analysis and action planning. Mike Doherty quips, "If a lifeguard's feet go in the water, there will be paperwork!" A detailed write-up is required after any incident at the pool or on the beach. In the case of serious incidents, the team collectively examines the incident end to end, discussing what went right and what went wrong. Operational changes are then made based on these findings, and training is often scheduled to help people build confidence around their ability to handle a similar incident in the future. In cases of particularly shocking or traumatic incidents, a counselor is brought on site to help staff cope with the psychological aftermath. The lifeguards may have been well prepared for what happened in practice, but might feel like they haven't done an adequate job. Similar to Google, lifeguarding embraces a culture of blameless incident analysis. Incidents are chaotic, and many factors contribute to any given incident. In this field, it's not helpful to place blame on a single individual.
+
+Automating Away Repetitive Work and Operational Overhead
+At their core, Google's Site Reliability Engineers are software engineers with a low tolerance for repetitive reactive work. It is strongly ingrained in our culture to avoid repeating an operation that doesn't add value to a service. If a task can be automated away, why would you run a system on repetitive work that is of low value? Automation lowers operational overhead and frees up time for our engineers to proactively assess and improve the services they support.
+
+The industries that we surveyed were mixed in terms of if, how, and why they embraced automation. Certain industries trusted humans more than machines. During the tenure of our industry veteran, the US nuclear Navy eschewed automation in favor of a series of interlocks and administrative procedures. For example, according to Jeff Stevenson, operating a valve required an operator, a supervisor, and a crew member on the phone with the engineering watch officer tasked with monitoring the response to the action taken. These operations were very manual due to concern that an automated system might not spot a problem that a human would definitely notice. Operations on a submarine are ruled by a trusted human decision chain-a series of people, rather than one individual. The nuclear Navy was also concerned that automation and computers move so rapidly that they are all too capable of committing a large, irreparable mistake. When you are dealing with nuclear reactors, a slow and steady methodical approach is more important than accomplishing a task quickly.
+According to John Li, the proprietary trading industry has become increasingly cautious in its application of automation in recent years. Experience has shown that incorrectly configured automation can inflict significant damage and incur a great deal of financial loss in a very short period of time. For example, in 2012 Knight Capital Group encountered a "software glitch" that led to a loss of
+$440M in just a few hours.160 Similarly, in 2010 the US stock market experienced a Flash Crash that was ultimately blamed on a rogue trader attempting to manipulate the market with automated means. While the market was quick to recover, the Flash Crash resulted in a loss on the magnitude of
+trillions of dollars in just 30 minutes.161 Computers can execute tasks very quickly, and speed can be a negative if these tasks are configured incorrectly.
+In contrast, some companies embrace automation precisely because computers act more quickly than people. According to Eddie Kennedy, efficiency and monetary savings are key in the manufacturing industry, and automation provides a means to accomplish tasks more efficiently and cost-effectively. Furthermore, automation is generally more reliable and repeatable than work conducted manually by humans, which means that it produces higher-quality standards and tighter tolerances. Dan Sheridan discussed automation as deployed in the UK nuclear industry. Here, a rule of thumb dictates that if a plant is required to respond to a given situation in less than 30 minutes, that response must be automated.
+In Matt Toia's experience, the aviation industry applies automation selectively.
+
+For example, operational failover is performed automatically, but when it comes to certain other tasks, the industry trusts automation only when it's verified by a human. While the industry employs a good deal of automatic monitoring, actual air-traffic-control-system implementations must be manually inspected by humans.
+According to Erik Gross, automation has been quite effective in reducing user error in laser eye surgery. Before LASIK surgery is performed, the doctor measures the patient using a refractive eye test. Originally, the doctor would type in the numbers and press a button, and the laser would go to work correcting the patient's vision. However, data entry errors could be a big issue. This process also entailed the possibility of mixing up patient data or jumbling numbers for the left and right eye.
+Automation now greatly lessens the chance that humans make a mistake that impacts someone's vision. A computerized sanity check of manually entered data was the first major automated improvement: if a human operator inputs measurements outside an expected range, automation promptly and prominently flags this case as unusual. Other automated improvements followed this development: now the iris is photographed during the preliminary refractive eye test. When it's time to perform the surgery, the iris of the patient is automatically matched to the iris in the photo, thus eliminating the possibility of mixing up patient data. When this automated solution was implemented, an entire class of medical errors disappeared.
+
+Structured and Rational Decision Making
+At Google in general, and in Site Reliability Engineering in particular, data is critical. The team aspires to make decisions in a structured and rational way by ensuring that:
+The basis for the decision is agreed upon advance, rather than justified ex post facto
+The inputs to the decision are clear Any assumptions are explicitly stated
+Data-driven decisions win over decisions based on feelings, hunches, or the opinion of the most senior employee in the room
+Google SRE operates under the baseline assumption that everyone on the team:
+
+Has the best interests of a service's users at heart
+Can figure out how to proceed based on the data available
+
+Decisions should be informed rather than prescriptive, and are made without deference to personal opinions-even that of the most-senior person in the room, who Eric Schmidt and Jonathan Rosenberg dub the "HiPPO," for "Highest-Paid Person's Opinion" [Sch14].
+Decision making in different industries varies widely. We learned that some industries use an approach of if it ain't broke, don't fix it...ever. Industries featuring systems whose design entailed much thought and effort are often characterized by a reluctance to change the underlying technology. For example, the telecom industry still uses long-distance switches that were implemented in the 1980s. Why do they rely on technology developed a few decades ago? These switches "are pretty much bulletproof and massively redundant," according to Gus Hartmann. As reported by Dan Sheridan, the nuclear industry is similarly slow to change. All decisions are underpinned by the thought: if it works now, don't change it.
+Many industries heavily focus on playbooks and procedures rather than open- ended problem solving. Every humanly conceivable scenario is captured in a checklist or in "the binder." When something goes wrong, this resource is the authoritative source for how to react. This prescriptive approach works for industries that evolve and develop relatively slowly, because the scenarios of what could go wrong are not constantly evolving due to system updates or changes. This approach is also common in industries in which the skill level of the workers may be limited, and the best way to make sure that people will respond appropriately in an emergency is to provide a simple, clear set of instructions.
+Other industries also take a clear, data-driven approach to decision making. In Eddie Kennedy's experience, research and manufacturing environments are characterized by a rigorous experimentation culture that relies heavily on formulating and testing hypotheses. These industries regularly conduct controlled experiments to make sure that a given change yields the expected result at a statistically significant level and that nothing unexpected occurs. Changes are only implemented when data yielded by the experiment supports the decision.
+
+Finally, some industries, like proprietary trading, divide decision making to better manage risk. According to John Li, this industry features an enforcement team separate from the traders to ensure that undue risks aren't taken in pursuit of achieving a profit. The enforcement team is responsible for monitoring events on the floor and halting trading if events spin out of hand. If a system abnormality occurs, the enforcement team's first response is to shut down the system. As put by John Li, "If we aren't trading, we aren't losing money. We aren't making money either, but at least we aren't losing money." Only the enforcement team can bring the system back up, despite how excruciating a delay might seem to traders who are missing a potentially profitable opportunity.
+
+Conclusions
+Many of the principles that are core to Site Reliability Engineering at Google are evident across a wide range of industries. The lessons already learned by well- established industries likely inspired some of the practices in use at Google today.
+A main takeaway of our cross-industry survey was that in many parts of its software business, Google has a higher appetite for velocity than players in most other industries. The ability to move or change quickly must be weighed against the differing implications of a failure. In the nuclear, aviation, or medical industries, for example, people could be injured or even die in the event of an outage or failure. When the stakes are high, a conservative approach to achieving high reliability is warranted.
+At Google, we constantly walk a tightrope between user expectations for high reliability versus a laser-sharp focus on rapid change and innovation. While Google is incredibly serious about reliability, we must adapt our approaches to our high rate of change. As discussed in earlier chapters, many of our software businesses such as Search make conscious decisions as to how reliable "reliable enough" really is.
+Google has that flexibility in most of our software products and services, which operate in an environment in which lives are not directly at risk if something goes wrong. Therefore, we're able to use tools such as error budgets (Motivation for Error Budgets) as a means to "fund" a culture of innovation and calculated risk taking. In essence, Google has adapted known reliability principles that were in many cases developed and honed in other industries to create its own
+
+unique reliability culture, one that addresses a complicated equation that balances scale, complexity, and velocity with high reliability.
+
+154E911 (Enhanced 911): Emergency response line in the US that leverages location data.
+
+155Electrocardiogram	readings:
+https://en.wikipedia.org/wiki/Electrocardiography.
+
+156https://en.wikipedia.org/wiki/Safety_integrity_level 157https://en.wikipedia.org/wiki/Corrective_and_preventive_action 158https://en.wikipedia.org/wiki/Competent_authority 159http://ehstoday.com/safety/nsc-2013-oneill-exemplifies-safety-leadership.
+160See "FACTS, Section B" for the discussion of Knight and Power Peg software in [Sec13].
+
+161"Regulators blame computer algorithm for stock market 'flash crash'," Computerworld, http://www.computerworld.com/article/2516076/financial- it/regulators-blame-computer-algorithm-for-stock-market-flash-crash-.html.
+
+Chapter 34 - Conclusion
+Written by Benjamin Lutch162Edited by Betsy Beyer
+I read through this book with enormous pride. From the time I began working at Excite in the early '90s, where my group was a sort of neanderthal SRE group dubbed "Software Operations," I've spent my career fumbling through the process of building systems. In light of my experiences over the years in the tech industry, it's amazing to see how the idea of SRE took root at Google and evolved so quickly. SRE has grown from a few hundred engineers when I joined Google in 2006 to over 1,000 people today, spread over a dozen sites and running what I think is the most interesting computing infrastructure on the planet.
+So what has enabled the SRE organization at Google to evolve over the past decade to maintain this massive infrastructure in an intelligent, efficient, and scalable way? I think that the key to the overwhelming success of SRE is the nature of the principles by which it operates.
+SRE teams are constructed so that our engineers divide their time between two equally important types of work. SREs staff on-call shifts, which entail putting our hands around the systems, observing where and how these systems break, and understanding challenges such as how to best scale them. But we also have time to then reflect and decide what to build in order to make those systems easier to manage. In essence, we have the pleasure of playing both the roles of the pilot and the engineer/designer. Our experiences running massive computing infrastructure are codified in actual code and then packaged as a discrete product.
+These solutions are then easily usable by other SRE teams and ultimately by anyone at Google (or even outside of Google...think Google Cloud!) who wants to use or improve upon the experience we've accumulated and the systems we've built.
+When you approach building a team or a system, ideally its foundation should be a set of rules or axioms that are general enough to be immediately useful, but that will remain relevant in the future. Much of what Ben Treynor Sloss outlined
+
+in this book's introduction represents just that: a flexible, mostly future-proof set of responsibilities that remain spot-on 10 years after they were conceived, despite the changes and growth Google's infrastructure and the SRE team have undergone.
+As SRE has grown, we've noticed a couple different dynamics at play. The first is the consistent nature of SRE's primary responsibilities and concerns over time: our systems might be 1,000 times larger or faster, but ultimately, they still need to remain reliable, flexible, easy to manage in an emergency, well monitored, and capacity planned. At the same time, the typical activities undertaken by SRE evolve by necessity as Google's services and SRE's competencies mature. For example, what was once a goal to "build a dashboard for 20 machines" might now instead be "automate discovery, dashboard building, and alerting over a fleet of tens of thousands of machines."
+For those who haven't been in the trenches of SRE for the past decade, an analogy between how SRE thinks about complex systems and how the aircraft industry has approached plane flight is useful in conceptualizing how SRE has evolved and matured over time. While the stakes of failure between the two industries are very different, certain core similarities hold true.
+Imagine that you wanted to fly between two cities a hundred years ago. Your airplane probably had a single engine (two, if you were lucky), a few bags of cargo, and a pilot. The pilot also filled the role of mechanic, and possibly additionally acted as cargo loader and unloader. The cockpit had room for the pilot, and if you were lucky, a co-pilot/navigator. Your little plane would bounce off a runway in good weather, and if everything went well, you'd slowly climb your way through the skies and eventually touch down in another city, maybe a few hundred miles away. Failure of any of the plane's systems was catastrophic, and it wasn't unheard of for a pilot to have to climb out of the cockpit to perform repairs in-flight! The systems that fed into the cockpit were essential, simple, and fragile, and most likely were not redundant.
+Fast-forward a hundred years to a huge 747 sitting on the tarmac. Hundreds of passengers are loading up on both floors, while tons of cargo are simultaneously being loaded into the hold below. The plane is chock-full of reliable, redundant systems. It's a model of safety and reliability; in fact, you're actually safer in the air than on the ground in a car. Your plane will take off from a dotted line on a runway on one continent, and land easily on a dotted line on another runway
+
+6,000 miles away, right on schedule-within minutes of its forecasted landing time. But take a look into the cockpit and what do you find? Just two pilots again!
+How has every other element of the flight experience-safety, capacity, speed, and reliability-scaled up so beautifully, while there are still only two pilots? The answer to this question is a great parallel to how Google approaches the enormous, fantastically complex systems that SRE runs. The interfaces to the plane's operating systems are well thought out and approachable enough that learning how to pilot them in normal conditions is not an insurmountable task. Yet these interfaces also provide enough flexibility, and the people operating them are sufficiently trained, that responses to emergencies are robust and quick. The cockpit was designed by people who understand complex systems and how to present them to humans in a way that's both consumable and scalable. The systems underlying the cockpit have all the same properties discussed in this book: availability, performance optimization, change management, monitoring and alerting, capacity planning, and emergency response.
+Ultimately, SRE's goal is to follow a similar course. An SRE team should be as compact as possible and operate at a high level of abstraction, relying upon lots of backup systems as failsafes and thoughtful APIs to communicate with the systems. At the same time, the SRE team should also have comprehensive knowledge of the systems-how they operate, how they fail, and how to respond to failures-that comes from operating them day-to-day.
+
+162Vice President, Site Reliability Engineering, for Google, Inc.
+
+Appendix A - Availability Table
+Availability is generally calculated based on how long a service was unavailable over some period. Assuming no planned downtime, Table 1-1 indicates how much downtime is permitted to reach a given availability level.
+Table 1-1. Availability table Availability level Allowed unavailability window
+
+
+per year per quarter per month per week per day
+per hour
+
+90%
+
+36.5 days
+
+9 days
+
+3 days
+
+16.8 hours
+
+2.4 hours
+
+6 minutes
+
+95%
+
+18.25 days
+
+4.5 days
+
+1.5 days
+
+8.4 hours
+
+1.2 hours
+
+3 minutes
+
+99%
+
+3.65 days
+
+21.6 hours
+
+7.2 hours
+
+1.68 hours
+
+14.4 minutes
+
+36 seconds
+
+99.5%
+
+1.83 days
+
+10.8 hours
+
+3.6 hours
+
+50.4 minutes
+
+7.20 minutes
+
+18 seconds
+
+99.9%
+
+8.76 hours
+
+2.16 hours
+
+43.2 minutes
+
+10.1 minutes
+
+1.44 minutes
+
+3.6 seconds
+
+99.95%
+
+4.38 hours
+
+1.08 hours
+
+21.6 minutes
+
+5.04 minutes
+
+43.2 seconds
+
+1.8 seconds
+
+99.99%
+
+52.6 minutes
+
+12.96 minutes
+
+4.32 minutes
+
+60.5 seconds
+
+8.64 seconds
+
+0.36 seconds
+
+99.999%
+
+5.26 minutes
+
+1.30 minutes
+
+25.9 seconds
+
+6.05 seconds
+
+0.87 seconds
+
+0.04 seconds
+
+Using an aggregate unavailability metric (i.e., "X% of all operations failed") is more useful than focusing on outage lengths for services that may be partially available-for instance, due to having multiple replicas, only some of which are unavailable-and for services whose load varies over the course of a day or week rather than remaining constant.
+See Equations Time-based availability and Aggregate availability in Embracing Risk for calculations.
+
+Appendix B - A Collection of Best Practices for Production Services
+Written by Ben Treynor SlossEdited by Betsy Beyer
+
+Fail Sanely
+Sanitize and validate configuration inputs, and respond to implausible inputs by both continuing to operate in the previous state and alerting to the receipt of bad input. Bad input often falls into one of these categories:
+Incorrect data
+
+Validate both syntax and, if possible, semantics. Watch for empty data and partial or truncated data (e.g., alert if the configuration is N% smaller than the previous version).
+Delayed data
+
+This may invalidate current data due to timeouts. Alert well before the data is expected to expire.
+Fail in a way that preserves function, possibly at the expense of being overly permissive or overly simplistic. We've found that it's generally safer for systems to continue functioning with their previous configuration and await a human's approval before using the new, perhaps invalid, data.
+
+Examples
+
+
+In 2005, Google's global DNS load- and latency-balancing system received an empty DNS entry file as a result of file permissions. It accepted this empty file and served NXDOMAIN for six minutes for all Google properties. In response, the system now performs a number of sanity checks on new configurations, including confirming the presence of virtual IPs for google.com, and will continue serving the previous DNS entries until it receives a new file that passes
+
+its input checks.
+
+In 2009, incorrect (but valid) data led to Google marking the entire Web as containing malware [May09]. A configuration file containing the list of suspect URLs was replaced by a single forward slash character (/), which matched all URLs. Checks for dramatic changes in file size and checks to see whether the configuration is matching sites that are believed unlikely to contain malware would have prevented this from reaching production.
+
+Progressive Rollouts
+Nonemergency rollouts must proceed in stages. Both configuration and binary changes introduce risk, and you mitigate this risk by applying the change to small fractions of traffic and capacity at one time. The size of your service or rollout, as well as your risk profile, will inform the percentages of production capacity to which the rollout is pushed, and the appropriate time frame between stages. It's also a good idea to perform different stages in different geographies, in order to detect problems related to diurnal traffic cycles and geographical traffic mix differences.
+Rollouts should be supervised. To ensure that nothing unexpected is occurring during the rollout, it must be monitored either by the engineer performing the rollout stage or-preferably-a demonstrably reliable monitoring system. If unexpected behavior is detected, roll back first and diagnose afterward in order to minimize Mean Time to Recovery.
+
+Define SLOs Like a User
+Measure availability and performance in terms that matter to an end user. See Service Level Objectives for more discussion.
+
+Example
+
+
+Measuring error rates and latency at the Gmail client, rather than at the server, resulted in a substantial reduction in our assessment of Gmail availability, and prompted changes to both Gmail client and server code. The result was that Gmail went from about 99.0% available to over 99.9% available in a few years.
+
+Error Budgets
+Balance reliability and the pace of innovation with error budgets (see Motivation for Error Budgets), which define the acceptable level of failure for a service, over some period; we often use a month. A budget is simply 1 minus a service's SLO; for instance, a service with a 99.99% availability target has a 0.01% "budget" for unavailability. As long as the service hasn't spent its error budget for the month through the background rate of errors plus any downtime, the development team is free (within reason) to launch new features, updates, and so on.
+If the error budget is spent, the service freezes changes (except urgent security and bug fixes addressing any cause of the increased errors) until either the service has earned back room in the budget, or the month resets. For mature services with an SLO greater than 99.99%, a quarterly rather than monthly budget reset is appropriate, because the amount of allowable downtime is small.
+Error budgets eliminate the structural tension that might otherwise develop between SRE and product development teams by giving them a common, data- driven mechanism for assessing launch risk. They also give both SRE and product development teams a common goal of developing practices and technology that allow faster innovation and more launches without "blowing the budget."
+
+Monitoring
+Monitoring may have only three output types:
+
+Pages
+
+A human must do something now
+
+Tickets
+
+    A human must do something within a few days Logging
+No one need look at this output immediately, but it's available for later
+
+analysis if needed
+
+If it's important enough to bother a human, it should either require immediate action (i.e., page) or be treated as a bug and entered into your bug-tracking system. Putting alerts into email and hoping that someone will read all of them and notice the important ones is the moral equivalent of piping them to /dev/null: they will eventually be ignored. History demonstrates this strategy is an attractive nuisance because it can work for a while, but it relies on eternal human vigilance, and the inevitable outage is thus more severe when it happens.
+
+Postmortems
+Postmortems (see Postmortem Culture: Learning from Failure) should be blameless and focus on process and technology, not people. Assume the people involved in an incident are intelligent, are well intentioned, and were making the best choices they could given the information they had available at the time. It follows that we can't "fix" the people, but must instead fix their environment: e.g., improving system design to avoid entire classes of problems, making the appropriate information easily available, and automatically validating operational decisions to make it difficult to put systems in dangerous states.
+
+Capacity Planning
+Provision to handle a simultaneous planned and unplanned outage, without making the user experience unacceptable; this results in an "N + 2" configuration, where peak traffic can be handled by N instances (possibly in degraded mode) while the largest 2 instances are unavailable:
+Validate prior demand forecasts against reality until they consistently match. Divergence implies unstable forecasting, inefficient provisioning, and risk of a capacity shortfall.
+Use load testing rather than tradition to establish the resource-to-capacity ratio: a cluster of X machines could handle Y queries per second three months ago, but can it still do so given changes to the system?
+Don't mistake day-one load for steady-state load. Launches often attract more traffic, while they're also the time you especially want to put the product's best foot forward. See Reliable Product Launches at Scale and Launch Coordination Checklist.
+
+Overloads and Failure
+Services should produce reasonable but suboptimal results if overloaded. For example, Google Search will search a smaller fraction of the index, and stop serving features like Instant to continue to provide good quality web search results when overloaded. Search SRE tests web search clusters beyond their rated capacity to ensure they perform acceptably when overloaded with traffic.
+For times when load is high enough that even degraded responses are too expensive for all queries, practice graceful load shedding, using well-behaved queuing and dynamic timeouts; see Handling Overload. Other techniques include answering requests after a significant delay ("tarpitting") and choosing a consistent subset of clients to receive errors, preserving a good user experience for the remainder.
+Retries can amplify low error rates into higher levels of traffic, leading to cascading failures (see Addressing Cascading Failures). Respond to cascading failures by dropping a fraction of traffic (including retries!) upstream of the system once total load exceeds total capacity.
+Every client that makes an RPC must implement exponential backoff (with jitter) for retries, to dampen error amplification. Mobile clients are especially troublesome because there may be millions of them and updating their code to fix behavior takes a significant amount of time-possibly weeks-and requires that users install updates.
+
+SRE Teams
+SRE teams should spend no more than 50% of their time on operational work (see Eliminating Toil); operational overflow should be directed to the product development team. Many services also include the product developers in the on- call rotation and ticket handling, even if there is currently no overflow. This provides incentives to design systems that minimize or eliminate operational toil, along with ensuring that the product developers are in touch with the operational side of the service. A regular production meeting between SREs and the development team (see Communication and Collaboration in SRE) is also helpful.
+
+We've found that at least eight people need to be part of the on-call team, in order to avoid fatigue and allow sustainable staffing and low turnover. Preferably, those on-call should be in two well-separated geographic locations (e.g., California and Ireland) to provide a better quality of life by avoiding nighttime pages; in this case, six people at each site is the minimum team size.
+Expect to handle no more than two events per on-call shift (e.g., per 12 hours): it takes time to respond to and fix outages, start the postmortem, and file the resulting bugs. More frequent events may degrade the quality of response, and suggest that something is wrong with (at least one of) the system's design, monitoring sensitivity, and response to postmortem bugs.
+Ironically, if you implement these best practices, the SRE team may eventually end up out of practice in responding to incidents due to their infrequency, making a long outage out of a short one. Practice handling hypothetical outages (see Disaster Role Playing) routinely and improve your incident-handling documentation in the process.
+
+Appendix C - Example Incident State Document
+Shakespeare Sonnet++ Overload: 2015-10-21
+Incident management info: http://incident-management-cheat-sheet
+
+(Communications lead to keep summary updated.)
+Summary: Shakespeare search service in cascading failure due to newly discovered sonnet not in search index.
+Status: active, incident #465
+
+Command Post(s): #shakespeare on IRC
+
+Command Hierarchy (all responders)
+
+Current Incident Commander: jennifer
+
+Operations lead: docbrown Planning lead: jennifer Communications lead: jennifer
+Next Incident Commander: to be determined
+
+(Update at least every four hours and at handoff of Comms Lead role.)
+Detailed Status (last updated at 2015-10-21 15:28 UTC by jennifer)
+
+Exit Criteria:
+
+New sonnet added to Shakespeare search corpus TODO
+Within availability (99.99%) and latency (99%ile < 100 ms) SLOs for 30+ minutes TODO
+TODO list and bugs filed:
+
+Run MapReduce job to reindex Shakespeare corpus DONE
+Borrow emergency resources to bring up extra capacity DONE
+
+Enable flux capacitor to balance load between clusters (Bug 5554823)
+TODO
+
+Incident timeline (most recent first: times are in UTC)
+
+2015-10-21 15:28 UTC jennifer
+
+    Increasing serving capacity globally by 2x 2015-10-21 15:21 UTC jennifer
+Directing all traffic to USA-2 sacrificial cluster and draining traffic from other clusters so they can recover from cascading failure while spinning up more tasks
+    MapReduce index job complete, awaiting Bigtable replication to all clusters 2015-10-21 15:10 UTC martym
+    Adding new sonnet to Shakespeare corpus and starting index MapReduce 2015-10-21 15:04 UTC martym
+Obtains  text  of  newly  discovered  sonnet  from  shakespeare-discuss@
+mailing list
+
+2015-10-21 15:01 UTC docbrown
+
+    Incident declared due to cascading failure 2015-10-21 14:55 UTC docbrown
+Pager storm, ManyHttp500s in all clusters
+
+Appendix D - Example Postmortem
+Shakespeare Sonnet++ Postmortem (incident #465)
+
+Date: 2015-10-21
+
+Authors: jennifer, martym, agoogler
+
+Status: Complete, action items in progress
+
+Summary: Shakespeare Search down for 66 minutes during period of very high interest in Shakespeare due to discovery of a new sonnet.
+
+Impact:163 Estimated 1.21B queries lost, no revenue impact.
+
+Root Causes:164 Cascading failure due to combination of exceptionally high load and a resource leak when searches failed due to terms not being in the Shakespeare corpus. The newly discovered sonnet used a word that had never before appeared in one of Shakespeare's works, which happened to be the term users searched for. Under normal circumstances, the rate of task failures due to resource leaks is low enough to be unnoticed.
+Trigger: Latent bug triggered by sudden increase in traffic.
+
+Resolution: Directed traffic to sacrificial cluster and added 10x capacity to mitigate cascading failure. Updated index deployed, resolving interaction with latent bug. Maintaining extra capacity until surge in public interest in new sonnet passes. Resource leak identified and fix deployed.
+Detection: Borgmon detected high level of HTTP 500s and paged on-call.
+
+Action Items:165
+
+Action Item	Type	Owner	Bug
+
+Update playbook
+with instructions	mitigate	jennifer	n/a DONE
+
+for responding to cascading failure
+
+
+
+Use flux capacitor to balance load between clusters
+
+
+prevent	martym
+
+Bug 5554823
+TODO
+
+
+
+
+Schedule cascading failure test during next DiRT
+
+
+process	docbrown	n/a TODO
+
+
+
+
+Investigate running index MR/fusion continuously
+
+
+prevent	jennifer
+
+Bug 5554824
+TODO
+
+
+
+
+Plug file descriptor leak in search ranking subsystem
+
+
+prevent	agoogler
+
+Bug 5554825
+DONE
+
+
+
+
+Add load shedding capabilities to Shakespeare search
+
+
+prevent	agoogler
+
+Bug 5554826
+TODO
+
+
+
+
+Build regression tests to ensure servers respond sanely to queries of death
+
+
+
+prevent	clarac
+
+
+Bug 5554827
+TODO
+
+
+
+
+Deploy updated search ranking subsystem to prod
+
+
+prevent	jennifer	n/a DONE
+
+Freeze production until 2015-11-20 due to error budget exhaustion, or seek exception due to grotesque, unbelievable, bizarre, and unprecedented circumstances
+
+
+
+
+
+other	docbrown	n/a TODO
+
+
+
+Lessons Learned
+
+What went well
+
+Monitoring quickly alerted us to high rate (reaching ~100%) of HTTP 500s Rapidly distributed updated Shakespeare corpus to all clusters
+What went wrong
+
+We're out of practice in responding to cascading failure
+We exceeded our availability error budget (by several orders of magnitude) due to the exceptional surge of traffic that essentially all resulted in failures
+
+Where we got lucky166
+Mailing list of Shakespeare aficionados had a copy of new sonnet available Server logs had stack traces pointing to file descriptor exhaustion as cause for crash
+Query-of-death was resolved by pushing new index containing popular search term
+
+Timeline167
+
+2015-10-21 (all times UTC)
+
+14:51 News reports that a new Shakespearean sonnet has been discovered
+
+in a Delorean's glove compartment
+14:53  Traffic  to  Shakespeare  search  increases  by  88x  after  post  to
+/r/shakespeare points to Shakespeare search engine as place to find new sonnet (except we don't have the sonnet yet)
+14:54 OUTAGE BEGINS - Search backends start melting down under load
+14:55 docbrown receives pager storm, ManyHttp500s from all clusters 14:57 All traffic to Shakespeare search is failing: see http://monitor 14:58 docbrown starts investigating, finds backend crash rate very high
+15:01 INCIDENT BEGINS docbrown declares incident #465 due to cascading failure, coordination on #shakespeare, names jennifer incident commander
+15:02 someone coincidentally sends email to shakespeare-discuss@ re sonnet discovery, which happens to be at top of martym's inbox
+15:03 jennifer notifies shakespeare-incidents@ list of the incident
+15:04 martym tracks down text of new sonnet and looks for documentation on corpus update
+15:06 docbrown finds that crash symptoms identical across all tasks in all clusters, investigating cause based on application logs
+15:07 martym finds documentation, starts prep work for corpus update 15:10 martym adds sonnet to Shakespeare's known works, starts indexing job
+15:12 docbrown contacts clarac & agoogler (from Shakespeare dev team) to help with examining codebase for possible causes
+15:18 clarac finds smoking gun in logs pointing to file descriptor exhaustion, confirms against code that leak exists if term not in corpus is searched for
+15:20 martym's index MapReduce job completes
+15:21 jennifer and docbrown decide to increase instance count enough to drop load on instances that they're able to do appreciable work before dying and being restarted
+15:23 docbrown load balances all traffic to USA-2 cluster, permitting instance count increase in other clusters without servers failing immediately 15:25 martym starts replicating new index to all clusters
+15:28 docbrown starts 2x instance count increase
+15:32 jennifer changes load balancing to increase traffic to nonsacrificial clusters
+15:33 tasks in nonsacrificial clusters start failing, same symptoms as before 15:34  found  order-of-magnitude  error  in  whiteboard  calculations  for
+
+instance count increase
+15:36 jennifer reverts load balancing to resacrifice USA-2 cluster in preparation for additional global 5x instance count increase (to a total of 10x initial capacity)
+15:36 OUTAGE MITIGATED, updated index replicated to all clusters 15:39 docbrown starts second wave of instance count increase to 10x initial capacity
+15:41 jennifer reinstates load balancing across all clusters for 1% of traffic 15:43 nonsacrificial clusters' HTTP 500 rates at nominal rates, task failures intermittent at low levels
+15:45 jennifer balances 10% of traffic across nonsacrificial clusters
+15:47 nonsacrificial clusters' HTTP 500 rates remain within SLO, no task failures observed
+15:50 30% of traffic balanced across nonsacrificial clusters 15:55 50% of traffic balanced across nonsacrificial clusters 16:00 OUTAGE ENDS, all traffic balanced across all clusters
+16:30 INCIDENT ENDS, reached exit criterion of 30 minutes' nominal performance
+
+Supporting information:168
+
+Monitoring dashboard,
+
+http://monitor/shakespeare?end_time=20151021T160000 &duration=7200
+
+163Impact is the effect on users, revenue, etc.
+164An explanation of the circumstances in which this incident happened. It's often helpful to use a technique such as the 5 Whys [Ohn88] to understand the contributing factors.
+
+165"Knee-jerk" AIs often turn out to be too extreme or costly to implement, and judgment may be needed to re-scope them in a larger context. There's a risk of over-optimizing for a particular issue, such as adding specific monitoring/alerting when reliable mechanisms like unit tests can catch problems much earlier in the development process.
+
+166This section is really for near misses, e.g., "The goat teleporter was available for emergency use with other animals despite lack of certification."
+
+167A "screenplay" of the incident; use the incident timeline from the Incident Management document to start filling in the postmortem's timeline, then supplement with other relevant entries.
+
+168Useful information, links, logs, screenshots, graphs, IRC logs, IM logs, etc.
+
+Appendix E - Launch Coordination Checklist
+This is Google's original Launch Coordination Checklist, circa 2005, slightly abridged for brevity:
+Architecture
+
+Architecture sketch, types of servers, types of requests from clients Programmatic client requests
+Machines and datacenters
+
+Machines and bandwidth, datacenters, N+2 redundancy, network QoS New domain names, DNS load balancing
+Volume estimates, capacity, and performance
+
+HTTP traffic and bandwidth estimates, launch "spike," traffic mix, 6 months out
+Load test, end-to-end test, capacity per datacenter at max latency Impact on other services we care most about
+Storage capacity
+
+System reliability and failover What happens when:
+Machine dies, rack fails, or cluster goes offline Network fails between two datacenters
+
+For each type of server that talks to other servers (its backends): How to detect when backends die, and what to do when they die How to terminate or restart without affecting clients or users
+Load balancing, rate-limiting, timeout, retry and error handling behavior
+Data backup/restore, disaster recovery
+
+Monitoring and server management
+
+Monitoring internal state, monitoring end-to-end behavior, managing alerts Monitoring the monitoring
+Financially important alerts and logs
+
+Tips for running servers within cluster environment
+
+Don't crash mail servers by sending yourself email alerts in your own server code
+Security
+
+Security design review, security code audit, spam risk, authentication, SSL Prelaunch visibility/access control, various types of blacklists
+Automation and manual tasks
+
+Methods and change control to update servers, data, and configs
+
+Release process, repeatable builds, canaries under live traffic, staged rollouts
+Growth issues
+
+Spare capacity, 10x growth, growth alerts
+
+Scalability bottlenecks, linear scaling, scaling with hardware, changes needed Caching, data sharding/resharding
+External dependencies
+
+Third-party systems, monitoring, networking, traffic volume, launch spikes
+
+Graceful degradation, how to avoid accidentally overrunning third-party services
+Playing nice with syndicated partners, mail systems, services within Google
+
+Schedule and rollout planning
+
+Hard deadlines, external events, Mondays or Fridays
+
+Standard operating procedures for this service, for other services
