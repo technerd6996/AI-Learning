@@ -12,14 +12,24 @@ if not api_key:
 
 client = Groq(api_key=api_key)
 
-# Step 1 — Load and chunk documents
-loader = TextLoader("sre_notes.txt")
-documents = loader.load()
+files = ["sre_notes.txt", "SRE_Google.txt" ]
+all_chunks = []
+
+#Step 2 - Split the document
 
 splitter = RecursiveCharacterTextSplitter(
-    chunk_size=200,
-    chunk_overlap=50
+    chunk_size=2500,
+    chunk_overlap=250
 )
+
+for file in files:
+    loader = TextLoader(file)
+    documents = loader.load()
+    chunks = splitter.split_documents(documents)
+    all_chunks.extend(chunks)
+
+print(f"Total Chunks: {len(all_chunks)}")
+
 chunks = splitter.split_documents(documents)
 
 # Step 2 — Store in ChromaDB
