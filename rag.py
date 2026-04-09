@@ -6,14 +6,14 @@ import chromadb
 
 # Step 1 — Load the document
 
-files = ["sre_notes.txt", "SRE_Google.txt" ]
+files = ["sre_notes.txt", "SRE_Google.txt", "SRE_Google_10.txt", "SRE_Google_20.txt", "SRE_Google_30.txt" ]
 all_chunks = []
 
 #Step 2 - Split the document
 
 splitter = RecursiveCharacterTextSplitter(
-    chunk_size=200,
-    chunk_overlap=50
+    chunk_size=3500,
+    chunk_overlap=350
 )
 
 for file in files:
@@ -54,7 +54,7 @@ results = collection.query(
     n_results=2
 )
 
-print(f"\nQuery: {query}")
-print(f"\nTop Results:")
-for doc in results["documents"][0]:
-    print(f"\n---\n{doc}")
+#print(f"\nQuery: {query}")
+#print(f"\nTop Results:")
+#for doc in results["documents"][0]:
+#    print(f"\n---\n{doc}")

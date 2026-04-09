@@ -18,8 +18,8 @@ all_chunks = []
 #Step 2 - Split the document
 
 splitter = RecursiveCharacterTextSplitter(
-    chunk_size=2500,
-    chunk_overlap=250
+    chunk_size=3500,
+    chunk_overlap=350
 )
 
 for file in files:
