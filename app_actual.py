@@ -14,7 +14,7 @@ st.caption("Powered by RAG + LangChain + ChromaDB")
 
 # Initialize RAG pipeline once
 if "collection" not in st.session_state:
-    with st.spinner("Loading SRE knowledge base..."):
+    with st.spinner("⚙️ Loading SRE Knowledge Base... (this may take 5-10 mins on cold start)"):
         # Load documents
         files = ["sre_notes.txt", "SRE_Google.txt", "SRE_Google_10.txt", "SRE_Google_20.txt", "SRE_Google_30.txt"]
         all_chunks = []
