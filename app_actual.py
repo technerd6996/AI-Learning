@@ -20,7 +20,7 @@ if "collection" not in st.session_state:
         all_chunks = []
         
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=3500,
+            chunk_size=4500,
             chunk_overlap=50
         )
         
