@@ -15,31 +15,11 @@ st.caption("Powered by RAG + LangChain + ChromaDB and Fueled by Laziness of an E
 # Initialize RAG pipeline once
 if "collection" not in st.session_state:
     with st.spinner("⚙️ Loading SRE Knowledge Base... (this may take 10-15 mins on cold start)"):
-        # Load documents
-        files = ["sre_notes.txt", "SRE_Google.txt", "SRE_Google_10.txt", "SRE_Google_20.txt", "SRE_Google_30.txt"]
-        all_chunks = []
         
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=4500,
-            chunk_overlap=50
-        )
+        chroma_client = chromadb.PersistentClient(path="./DB")
+        collection = chroma_client.get_or_create_collection(name="SRE_Knowledge_Base")
         
-        for file in files:
-            loader = TextLoader(file)
-            documents = loader.load()
-            chunks = splitter.split_documents(documents)
-            all_chunks.extend(chunks)
-        
-        # Store in ChromaDB
-        chroma_client = chromadb.Client()
-        collection = chroma_client.get_or_create_collection(name="sre_knowledge")
-        
-        for i, chunk in enumerate(all_chunks):
-            collection.add(
-                documents=[chunk.page_content],
-                ids=[f"chunk_{i}"]
-            )
-        
+              
         st.session_state.collection = collection
         st.session_state.groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
