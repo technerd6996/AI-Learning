@@ -44,13 +44,13 @@ st.divider() # Optional: Adds a clean line between the header and the chat
 # Initialize RAG pipeline once
 
 if "collection" not in st.session_state:
-    with st.spinner("⚙️ Loading SRE Knowledge Base... (this may take 10-15 mins on cold start)"):
+    with st.spinner("⚙️ Connecting to SRE Knowledge Base..."):
       
-      
+
         chroma_client = chromadb.PersistentClient(path="./DB")
-    collection = chroma_client.get_or_create_collection(name="SRE_Knowledge_Base")
-    st.session_state.collection = collection
-    st.session_state.groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        collection = chroma_client.get_or_create_collection(name="SRE_Knowledge_Base")
+        st.session_state.collection = collection
+        st.session_state.groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 
 # Always update system message when expertise changes

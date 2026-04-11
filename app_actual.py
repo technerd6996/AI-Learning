@@ -44,7 +44,7 @@ st.divider() # Optional: Adds a clean line between the header and the chat
 # Initialize RAG pipeline once
 
 if "collection" not in st.session_state:
-    with st.spinner("⚙️ Loading SRE Knowledge Base... (this may take 10-15 mins on cold start)"):
+    with st.spinner("⚙️ Connecting to SRE Knowledge Base..."):
      
         chroma_client = chromadb.PersistentClient(path="./DB")
         collection = chroma_client.get_or_create_collection(name="SRE_Knowledge_Base")
