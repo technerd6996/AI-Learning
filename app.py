@@ -4,11 +4,8 @@ import streamlit as st
 import os
 import chromadb
 from groq import Groq
-
-# Page config
-
-
-# --- UI Layout: Top Header ---
+import time
+start = time.perf_counter()
 
 # Create two columns. The ratio [3, 1] keeps the selector small on the right.
 
@@ -45,8 +42,7 @@ st.divider() # Optional: Adds a clean line between the header and the chat
 
 if "collection" not in st.session_state:
     with st.spinner("⚙️ Connecting to SRE Knowledge Base..."):
-      
-
+     
         chroma_client = chromadb.PersistentClient(path="./DB")
         collection = chroma_client.get_or_create_collection(name="SRE_Knowledge_Base")
         st.session_state.collection = collection

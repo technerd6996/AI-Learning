@@ -4,11 +4,8 @@ import streamlit as st
 import os
 import chromadb
 from groq import Groq
-
-# Page config
-
-
-# --- UI Layout: Top Header ---
+import time
+start = time.perf_counter()
 
 # Create two columns. The ratio [3, 1] keeps the selector small on the right.
 
