@@ -4,8 +4,6 @@ import streamlit as st
 import os
 import chromadb
 from groq import Groq
-from langchain_community.document_loaders import TextLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Page config
 
@@ -47,12 +45,8 @@ st.divider() # Optional: Adds a clean line between the header and the chat
 
 if "collection" not in st.session_state:
     with st.spinner("⚙️ Loading SRE Knowledge Base... (this may take 10-15 mins on cold start)"):
-
-        # Load documents
-
-        files = ["sre_notes.txt", "SRE_Google.txt", "SRE_Google_10.txt", "SRE_Google_20.txt", "SRE_Google_30.txt"]
-        all_chunks = []
-        
+      
+      
         chroma_client = chromadb.PersistentClient(path="./DB")
     collection = chroma_client.get_or_create_collection(name="SRE_Knowledge_Base")
     st.session_state.collection = collection
