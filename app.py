@@ -9,7 +9,7 @@ col1, col2 = st.columns([3, 1])
 
 with col1:
     st.title("🔧 SRE Assistant")
-    st.caption("Fueled by Laziness of an ENgineer to refer Documents")
+    st.caption("Fueled by Laziness of an Engineer to refer Documents")
 
 with col2:
     expertise_level = st.selectbox(
