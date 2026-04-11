@@ -6,7 +6,7 @@ import chromadb
 
 # Step 1 — Load the document
 
-files = ["sre_notes.txt", "SRE_Google.txt", "SRE_Google_10.txt", "SRE_Google_20.txt", "SRE_Google_30.txt" ]
+files = ["sre_notes.txt", "SRE_Google.txt", "SRE_Google_10.txt", "SRE_Google_20.txt", "SRE_Google_30.txt", "SRE_Intro.txt", "SRE_Intro.txt" ]
 all_chunks = []
 
 #Step 2 - Split the document
