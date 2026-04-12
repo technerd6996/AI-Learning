@@ -51,3 +51,11 @@ This is Repository is the progress I make in my AI Learning journey
 * Implemented LLM-as-a-judge evaluation
 * Added prompt injection guardrails
 * Went from failing jailbreak tests to 10/10 pass rate
+
+12-04-2026
+
+* Fixed cold start performance
+* Incremental indexing working
+* Guardrails refined — 9/10 evaluation
+* UI improvements — dropdown, welcome message
+* Code refactored and cleaned 
