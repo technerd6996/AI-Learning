@@ -46,6 +46,10 @@ if "messages" not in st.session_state:
 else:
     st.session_state.messages[0] = system_message
 
+if len(st.session_state.messages) <= 1:
+    st.markdown("### 👋 Welcome! Ask me anything about SRE.")
+    st.markdown("I can help with incident response, monitoring, SLOs, error budgets and more.")
+
 # Display chat history
 for message in st.session_state.messages[1:]:
     with st.chat_message(message["role"]):
