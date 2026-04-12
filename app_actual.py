@@ -20,10 +20,10 @@ with col2:
     )
 
 level_instructions = {
-    "Level 1: Beginner": "Explain in layman's terms with analogies. No jargon.",
-    "Level 2: Intermediate": "Use standard IT terms. Clear and instructional.",
-    "Level 3: Advanced": "Technical depth for engineers. Focus on SRE metrics and tools.",
-    "Level 4: Expert": "Deep dive into architecture, edge cases, and complex trade-offs."
+    "Beginner": "Explain in layman's terms with analogies. No jargon.",
+    "Intermediate": "Use standard IT terms. Clear and instructional.",
+    "Advanced": "Technical depth for engineers. Focus on SRE metrics and tools.",
+    "Expert": "Deep dive into architecture, edge cases, and complex trade-offs."
 }
 current_persona_instruction = level_instructions[expertise_level]
 
