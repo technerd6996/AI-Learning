@@ -141,7 +141,7 @@ st.markdown(
         border-radius: 50% !important;
         border: none !important;
 
-        font-size: 20px !important;
+        font-size: 30px !important;
 
         background-color: #262730 !important;
         color: white !important;
