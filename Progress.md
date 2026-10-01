@@ -59,3 +59,20 @@ This is Repository is the progress I make in my AI Learning journey
 * Guardrails refined — 9/10 evaluation
 * UI improvements — dropdown, welcome message
 * Code refactored and cleaned 
+
+01-10-2026
+
+* Migrated from the unavailable Llama 4 Scout model to currently supported Groq models.
+* Separated prompt-injection detection from RAG response generation.
+* Explored Prompt Guard models for lightweight security classification.
+* Explored GPT-OSS models for RAG response generation.
+* Learned the difference between specialized security models and general-purpose instruct models.
+* Improved the RAG pipeline: Security Check → Retrieval → Context Augmentation → LLM Generation.
+* Fixed conversation history handling to prevent accidental mutation of Streamlit session state.
+* Improved system prompt handling for maintaining the SRE assistant role.
+* Added a floating Clear Chat History button to the Streamlit interface.
+* Improved chat history management and automatic history trimming.
+* Removed duplicate session-state initialization logic.
+* Continued refactoring `app_actual.py` and `rag_utils.py` for cleaner separation of responsibilities.
+* Improved understanding of prompt injection, jailbreak protection, RAG security, and model selection.
+* Continued optimizing the application toward a more reliable and production-oriented AI architecture.
